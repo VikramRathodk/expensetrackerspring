@@ -5,6 +5,7 @@ import jakarta.persistence.*
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import java.time.LocalDateTime
+import java.util.Optional
 
 
 @Entity
@@ -22,10 +23,16 @@ data class Expense(
     @field:Positive(message = "Amount must be greater than 0")
     val amount: Double,
 
-    @Column(nullable = false)
-    @field:NotBlank(message = "Category is required")
+    /* ================= CATEGORY RELATION ================= */
 
-    val category: String,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id", nullable = false)
+    val category: Category,
+
+    /* ================= USER OWNERSHIP ================= */
+
+    @Column(nullable = false)
+    val userId: Long,
 
     val note: String? = null,
 
