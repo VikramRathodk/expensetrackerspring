@@ -1,11 +1,16 @@
 package com.devvikram.expensetracker.expensetracker.exceptions
 
 import com.devvikram.expensetracker.expensetracker.models.ApiResponse
+import io.jsonwebtoken.ExpiredJwtException
+import io.jsonwebtoken.MalformedJwtException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.AuthenticationException
+import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import java.security.SignatureException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -68,6 +73,76 @@ class GlobalExceptionHandler {
             ),
             HttpStatus.CONFLICT
         )
+
+    /**
+     * Handle UsernameNotFoundException
+     */
+    @ExceptionHandler(UsernameNotFoundException::class)
+    fun handleUsernameNotFoundException(ex: UsernameNotFoundException): ResponseEntity<ApiResponse<Nothing>> {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+            ApiResponse(
+                status = false,
+                message = ex.message ?: "User not found",
+                data = null
+            )
+        )
+    }
+
+    /**
+     * Handle AuthenticationException
+     */
+    @ExceptionHandler(AuthenticationException::class)
+    fun handleAuthenticationException(ex: AuthenticationException): ResponseEntity<ApiResponse<Nothing>> {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+            ApiResponse(
+                status = false,
+                message = "Authentication failed: ${ex.message}",
+                data = null
+            )
+        )
+    }
+
+    /**
+     * Handle ExpiredJwtException
+     */
+    @ExceptionHandler(ExpiredJwtException::class)
+    fun handleExpiredJwtException(ex: ExpiredJwtException): ResponseEntity<ApiResponse<Nothing>> {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+            ApiResponse(
+                status = false,
+                message = "JWT token has expired",
+                data = null
+            )
+        )
+    }
+
+    /**
+     * Handle MalformedJwtException
+     */
+    @ExceptionHandler(MalformedJwtException::class)
+    fun handleMalformedJwtException(ex: MalformedJwtException): ResponseEntity<ApiResponse<Nothing>> {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+            ApiResponse(
+                status = false,
+                message = "Invalid JWT token format",
+                data = null
+            )
+        )
+    }
+
+    /**
+     * Handle SignatureException
+     */
+    @ExceptionHandler(SignatureException::class)
+    fun handleSignatureException(ex: SignatureException): ResponseEntity<ApiResponse<Nothing>> {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+            ApiResponse(
+                status = false,
+                message = "JWT signature validation failed",
+                data = null
+            )
+        )
+    }
 
     // 🔹 500 - Internal Server Error (fallback)
     @ExceptionHandler(Exception::class)
