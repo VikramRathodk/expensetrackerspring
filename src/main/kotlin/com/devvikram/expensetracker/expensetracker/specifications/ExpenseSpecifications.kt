@@ -1,11 +1,16 @@
 package com.devvikram.expensetracker.expensetracker.specifications
 
 
+import com.devvikram.expensetracker.expensetracker.dto.request.CustomReportRequest
 import com.devvikram.expensetracker.expensetracker.entity.Expense
 import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseFilterRequest
+import com.devvikram.expensetracker.expensetracker.entity.Category
+import com.devvikram.expensetracker.expensetracker.entity.User
 import org.springframework.data.jpa.domain.Specification
 import java.time.LocalDateTime
 import java.time.YearMonth
+import jakarta.persistence.criteria.Predicate
+
 
 object ExpenseSpecifications {
 
@@ -105,5 +110,49 @@ object ExpenseSpecifications {
             .and(filterByEndDate(request.endDate))
             .and(filterByMonthYear(request.year, request.month))
 
+    }
+
+
+    fun build(userId: Long, request: CustomReportRequest): Specification<Expense> {
+        return Specification { root, query, cb ->
+
+            val predicates = mutableListOf<Predicate>()
+
+            // Always filter by logged-in user
+            predicates.add(cb.equal(root.get<User>("user").get<Long>("id"), userId))
+
+            // Date range filter
+            if (request.startDate != null && request.endDate != null) {
+                predicates.add(
+                    cb.between(
+                        root.get("createdAt"),
+                        request.startDate,
+                        request.endDate
+                    )
+                )
+            }
+
+            // Category filter
+            if (!request.categoryIds.isNullOrEmpty()) {
+                predicates.add(
+                    root.get<Category>("category")
+                        .get<Long>("id")
+                        .`in`(request.categoryIds)
+                )
+            }
+
+            // Amount range filter
+            if (request.minAmount != null && request.maxAmount != null) {
+                predicates.add(
+                    cb.between(
+                        root.get("amount"),
+                        request.minAmount,
+                        request.maxAmount
+                    )
+                )
+            }
+
+            cb.and(*predicates.toTypedArray())
+        }
     }
 }
