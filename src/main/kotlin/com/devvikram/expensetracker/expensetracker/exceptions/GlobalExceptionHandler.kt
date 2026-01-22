@@ -1,6 +1,6 @@
 package com.devvikram.expensetracker.expensetracker.exceptions
 
-import com.devvikram.expensetracker.expensetracker.models.ApiResponse
+import com.devvikram.expensetracker.expensetracker.dto.response.ApiResponse
 import io.jsonwebtoken.ExpiredJwtException
 import io.jsonwebtoken.MalformedJwtException
 import org.springframework.http.HttpStatus

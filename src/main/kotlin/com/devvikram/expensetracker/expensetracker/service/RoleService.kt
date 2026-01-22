@@ -2,7 +2,7 @@ package com.devvikram.expensetracker.expensetracker.service
 
 
 import com.devvikram.expensetracker.expensetracker.enums.RoleType
-import com.devvikram.expensetracker.expensetracker.models.Role
+import com.devvikram.expensetracker.expensetracker.entity.Role
 import com.devvikram.expensetracker.expensetracker.repository.RoleRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

@@ -1,6 +1,6 @@
 package com.devvikram.expensetracker.expensetracker.security
 
-import com.devvikram.expensetracker.expensetracker.models.User
+import com.devvikram.expensetracker.expensetracker.entity.User
 
 
 import io.jsonwebtoken.Claims

@@ -1,4 +1,4 @@
-package com.devvikram.expensetracker.expensetracker.models.dtos
+package com.devvikram.expensetracker.expensetracker.dto.request
 
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive

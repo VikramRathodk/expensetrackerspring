@@ -2,12 +2,12 @@ package com.devvikram.expensetracker.expensetracker.controllers
 
 
 
-import com.devvikram.expensetracker.expensetracker.models.ApiResponse
-import com.devvikram.expensetracker.expensetracker.models.dtos.AssignRoleRequest
-import com.devvikram.expensetracker.expensetracker.models.dtos.AuthResponse
-import com.devvikram.expensetracker.expensetracker.models.dtos.LoginRequest
-import com.devvikram.expensetracker.expensetracker.models.dtos.RegisterRequest
-import com.devvikram.expensetracker.expensetracker.models.dtos.UserResponse
+import com.devvikram.expensetracker.expensetracker.dto.response.ApiResponse
+import com.devvikram.expensetracker.expensetracker.dto.request.AssignRoleRequest
+import com.devvikram.expensetracker.expensetracker.dto.response.AuthResponse
+import com.devvikram.expensetracker.expensetracker.dto.request.LoginRequest
+import com.devvikram.expensetracker.expensetracker.dto.request.RegisterRequest
+import com.devvikram.expensetracker.expensetracker.dto.response.UserResponse
 import com.devvikram.expensetracker.expensetracker.repository.UserRepository
 import com.devvikram.expensetracker.expensetracker.security.anotation.IsSuperAdmin
 import com.devvikram.expensetracker.expensetracker.service.AuthService
@@ -107,7 +107,9 @@ class AuthController(
 
 
     @GetMapping("/roles")
-    fun getAllRoles(): ResponseEntity<ApiResponse<List<String>>> {
+    fun getAllRoles(
+
+    ): ResponseEntity<ApiResponse<List<String>>> {
         val roles = roleService.getAllRoles().map { it.name.name }
         return ResponseEntity.ok(
             ApiResponse(

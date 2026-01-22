@@ -1,7 +1,6 @@
-package com.devvikram.expensetracker.expensetracker.models
+package com.devvikram.expensetracker.expensetracker.entity
 
 import com.devvikram.expensetracker.expensetracker.enums.RoleType
-import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.FetchType
@@ -13,7 +12,6 @@ import jakarta.persistence.JoinTable
 import jakarta.persistence.ManyToMany
 import jakarta.persistence.Table
 import java.time.LocalDateTime
-
 
 @Entity
 @Table(name = "users")

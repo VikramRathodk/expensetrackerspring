@@ -1,5 +1,4 @@
-package com.devvikram.expensetracker.expensetracker.models
-
+package com.devvikram.expensetracker.expensetracker.dto.response
 
 data class ApiResponse<T>(
     val status: Boolean,

@@ -1,31 +1,38 @@
 package com.devvikram.expensetracker.expensetracker.controllers
 
-
-import com.devvikram.expensetracker.expensetracker.models.ApiResponse
-import com.devvikram.expensetracker.expensetracker.models.ExpenseFilterRequest
-import com.devvikram.expensetracker.expensetracker.models.ExpenseResponse
-import com.devvikram.expensetracker.expensetracker.models.dtos.ExpenseRequest
+import com.devvikram.expensetracker.expensetracker.dto.response.ApiResponse
+import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseFilterRequest
+import com.devvikram.expensetracker.expensetracker.dto.response.ExpenseResponse
+import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseRequest
+import com.devvikram.expensetracker.expensetracker.repository.UserRepository
+import com.devvikram.expensetracker.expensetracker.security.anotation.IsAuthenticated
 import com.devvikram.expensetracker.expensetracker.service.ExpenseService
 import jakarta.validation.Valid
 import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDateTime
-
 
 @RestController
 @RequestMapping("/api/expenses")
 @CrossOrigin(origins = ["*"])
-class ExpenseController(private val expenseService: ExpenseService) {
+@IsAuthenticated
+class ExpenseController(
+    private val expenseService: ExpenseService,
+    private val userRepository: UserRepository
+) {
 
     @GetMapping
     fun getAllExpenses(
-        @RequestParam userId: Long,
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "10") size: Int
+        @RequestParam(defaultValue = "10") size: Int,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<Page<ExpenseResponse>>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val expenses = expenseService.getAllExpensesPaginated(userId, page, size)
             ResponseEntity.ok(ApiResponse(
                 status = true,
@@ -40,10 +47,11 @@ class ExpenseController(private val expenseService: ExpenseService) {
 
     @GetMapping("/search")
     fun searchExpenses(
-        @RequestParam userId: Long,
-        @RequestParam keyword: String
+        @RequestParam keyword: String,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<List<ExpenseResponse>>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val expenses = expenseService.searchExpenses(userId, keyword)
             ResponseEntity.ok(ApiResponse(
                 status = true,
@@ -58,10 +66,11 @@ class ExpenseController(private val expenseService: ExpenseService) {
 
     @GetMapping("/filter/category")
     fun filterByCategory(
-        @RequestParam userId: Long,
-        @RequestParam categoryId: Long
+        @RequestParam categoryId: Long,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<List<ExpenseResponse>>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val expenses = expenseService.filterByCategory(userId, categoryId)
             ResponseEntity.ok(ApiResponse(
                 status = true,
@@ -76,11 +85,12 @@ class ExpenseController(private val expenseService: ExpenseService) {
 
     @GetMapping("/filter/amount")
     fun filterByAmount(
-        @RequestParam userId: Long,
         @RequestParam minAmount: Double,
-        @RequestParam maxAmount: Double
+        @RequestParam maxAmount: Double,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<List<ExpenseResponse>>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val expenses = expenseService.filterByAmountRange(userId, minAmount, maxAmount)
             ResponseEntity.ok(ApiResponse(
                 status = true,
@@ -95,11 +105,12 @@ class ExpenseController(private val expenseService: ExpenseService) {
 
     @GetMapping("/filter/date-range")
     fun filterByDateRange(
-        @RequestParam userId: Long,
         @RequestParam startDate: LocalDateTime,
-        @RequestParam endDate: LocalDateTime
+        @RequestParam endDate: LocalDateTime,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<List<ExpenseResponse>>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val expenses = expenseService.filterByDateRange(userId, startDate, endDate)
             ResponseEntity.ok(ApiResponse(
                 status = true,
@@ -114,13 +125,14 @@ class ExpenseController(private val expenseService: ExpenseService) {
 
     @PostMapping("/filter")
     fun filterExpenses(
-        @RequestParam userId: Long,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "10") size: Int,
         @RequestParam(defaultValue = "createdAt") sortBy: String,
-        @RequestBody request: ExpenseFilterRequest
+        @RequestBody request: ExpenseFilterRequest,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<Page<ExpenseResponse>>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val expenses = expenseService.filterExpenses(userId, request, page, size, sortBy)
             ResponseEntity.ok(ApiResponse(
                 status = true,
@@ -135,10 +147,14 @@ class ExpenseController(private val expenseService: ExpenseService) {
 
     @PostMapping
     fun createExpense(
-        @Valid @RequestBody request: ExpenseRequest
+        @Valid @RequestBody request: ExpenseRequest,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<ExpenseResponse>> {
         return try {
-            val created = expenseService.createExpense(request)
+            val userId = getUserIdFromAuth(userDetails)
+            // Ensure the request userId matches the authenticated user
+            val validatedRequest = request.copy(userId = userId)
+            val created = expenseService.createExpense(validatedRequest)
             ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse(
                     status = true,
@@ -154,9 +170,10 @@ class ExpenseController(private val expenseService: ExpenseService) {
     @GetMapping("/{id}")
     fun getExpense(
         @PathVariable id: Long,
-        @RequestParam userId: Long
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<ExpenseResponse>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val expense = expenseService.getExpenseById(id, userId)
             if (expense != null) {
                 ResponseEntity.ok(ApiResponse(
@@ -177,10 +194,11 @@ class ExpenseController(private val expenseService: ExpenseService) {
     @PutMapping("/{id}")
     fun updateExpense(
         @PathVariable id: Long,
-        @RequestParam userId: Long,
-        @Valid @RequestBody request: ExpenseRequest
+        @Valid @RequestBody request: ExpenseRequest,
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<ExpenseResponse>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val updated = expenseService.updateExpense(id, userId, request)
             if (updated != null) {
                 ResponseEntity.ok(ApiResponse(
@@ -201,9 +219,10 @@ class ExpenseController(private val expenseService: ExpenseService) {
     @DeleteMapping("/{id}")
     fun deleteExpense(
         @PathVariable id: Long,
-        @RequestParam userId: Long
+        @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<String>> {
         return try {
+            val userId = getUserIdFromAuth(userDetails)
             val deleted = expenseService.deleteExpense(id, userId)
             if (deleted) {
                 ResponseEntity.ok(ApiResponse(
@@ -218,5 +237,11 @@ class ExpenseController(private val expenseService: ExpenseService) {
             ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse(status = false, message = e.message ?: "Failed to delete expense"))
         }
+    }
+
+    private fun getUserIdFromAuth(userDetails: UserDetails): Long {
+        return userRepository.findByEmail(userDetails.username)
+            .orElseThrow { RuntimeException("User not found") }
+            .id
     }
 }

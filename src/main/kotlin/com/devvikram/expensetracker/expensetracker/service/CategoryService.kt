@@ -3,7 +3,7 @@ package com.devvikram.expensetracker.expensetracker.service
 
 import com.devvikram.expensetracker.expensetracker.exceptions.ConflictException
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
-import com.devvikram.expensetracker.expensetracker.models.Category
+import com.devvikram.expensetracker.expensetracker.entity.Category
 import com.devvikram.expensetracker.expensetracker.repository.CategoryRepository
 import org.springframework.stereotype.Service
 
@@ -22,18 +22,19 @@ class CategoryService(
      */
 
     /* ---------- CREATE GLOBAL CATEGORY ---------- */
-    fun addGlobalCategory(category: Category): Category {
+    /* ---------- CREATE GLOBAL CATEGORY ---------- */
+    fun addGlobalCategory(category: Category, adminId: Long): Category {
 
         // Prevent duplicate global category names
         if (categoryRepository.existsByNameIgnoreCaseAndIsGlobalTrue(category.name)) {
             throw ConflictException("Global category '${category.name}' already exists")
         }
 
-        // Save as system-owned global category
+        // Save with admin's userId who created it
         return categoryRepository.save(
             category.copy(
                 isGlobal = true,
-                userId = 0L // 0 indicates system/admin ownership
+                userId = adminId  // Store which admin created this global category
             )
         )
     }

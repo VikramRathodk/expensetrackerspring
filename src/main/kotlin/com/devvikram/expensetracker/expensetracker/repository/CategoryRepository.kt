@@ -1,6 +1,6 @@
 package com.devvikram.expensetracker.expensetracker.repository
 
-import com.devvikram.expensetracker.expensetracker.models.Category
+import com.devvikram.expensetracker.expensetracker.entity.Category
 import org.springframework.data.jpa.repository.JpaRepository
 
 interface CategoryRepository : JpaRepository<Category, Long> {

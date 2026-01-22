@@ -1,4 +1,4 @@
-package com.devvikram.expensetracker.expensetracker.models
+package com.devvikram.expensetracker.expensetracker.dto.response
 
 import java.time.LocalDateTime
 

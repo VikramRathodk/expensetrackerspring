@@ -1,8 +1,8 @@
 package com.devvikram.expensetracker.expensetracker.specifications
 
 
-import com.devvikram.expensetracker.expensetracker.models.Expense
-import com.devvikram.expensetracker.expensetracker.models.ExpenseFilterRequest
+import com.devvikram.expensetracker.expensetracker.entity.Expense
+import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseFilterRequest
 import org.springframework.data.jpa.domain.Specification
 import java.time.LocalDateTime
 import java.time.YearMonth

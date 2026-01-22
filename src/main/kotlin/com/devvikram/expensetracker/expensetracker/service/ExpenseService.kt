@@ -2,10 +2,10 @@ package com.devvikram.expensetracker.expensetracker.service
 
 
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
-import com.devvikram.expensetracker.expensetracker.models.Expense
-import com.devvikram.expensetracker.expensetracker.models.ExpenseFilterRequest
-import com.devvikram.expensetracker.expensetracker.models.ExpenseResponse
-import com.devvikram.expensetracker.expensetracker.models.dtos.ExpenseRequest
+import com.devvikram.expensetracker.expensetracker.entity.Expense
+import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseFilterRequest
+import com.devvikram.expensetracker.expensetracker.dto.response.ExpenseResponse
+import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseRequest
 import com.devvikram.expensetracker.expensetracker.repository.CategoryRepository
 import com.devvikram.expensetracker.expensetracker.repository.ExpenseRepository
 import com.devvikram.expensetracker.expensetracker.specifications.ExpenseSpecifications

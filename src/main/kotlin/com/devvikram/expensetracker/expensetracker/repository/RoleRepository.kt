@@ -1,7 +1,7 @@
 package com.devvikram.expensetracker.expensetracker.repository
 
 import com.devvikram.expensetracker.expensetracker.enums.RoleType
-import com.devvikram.expensetracker.expensetracker.models.Role
+import com.devvikram.expensetracker.expensetracker.entity.Role
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 import java.util.*

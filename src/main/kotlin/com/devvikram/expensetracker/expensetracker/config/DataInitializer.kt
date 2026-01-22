@@ -2,7 +2,7 @@ package com.devvikram.expensetracker.expensetracker.config
 
 
 import com.devvikram.expensetracker.expensetracker.enums.RoleType
-import com.devvikram.expensetracker.expensetracker.models.User
+import com.devvikram.expensetracker.expensetracker.entity.User
 import com.devvikram.expensetracker.expensetracker.repository.UserRepository
 import com.devvikram.expensetracker.expensetracker.service.RoleService
 import org.springframework.boot.CommandLineRunner
