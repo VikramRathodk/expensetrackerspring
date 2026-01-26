@@ -3,18 +3,20 @@ FROM gradle:8.14-jdk21 AS builder
 
 WORKDIR /app
 
-# Copy gradle files first for better caching
-COPY build.gradle.kts settings.gradle.kts ./
+# Copy all gradle files
+COPY build.gradle.kts settings.gradle.kts gradlew ./
 COPY gradle ./gradle
-
-# Download dependencies (cached if build.gradle.kts hasn't changed)
-RUN gradle dependencies --no-daemon || true
 
 # Copy source code
 COPY src ./src
 
-# Build the application
-RUN gradle clean bootJar --no-daemon
+# Build the application with info logging to see what's happening
+RUN gradle clean bootJar --no-daemon --info
+
+# Verify JAR was created and show its location
+RUN echo "Contents of build directory:" && \
+    find /app/build -name "*.jar" -type f && \
+    ls -lah /app/build/libs/
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
@@ -24,8 +26,8 @@ WORKDIR /app
 # Create non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
 
-# Copy the JAR from builder
-COPY --from=builder /app/build/libs/*.jar app.jar
+# Copy the JAR from builder - use specific pattern
+COPY --from=builder /app/build/libs/*-SNAPSHOT.jar app.jar
 
 # Change ownership to non-root user
 RUN chown -R spring:spring /app
@@ -34,7 +36,7 @@ RUN chown -R spring:spring /app
 USER spring:spring
 
 # Railway provides PORT environment variable
-EXPOSE ${PORT:-8081}
+EXPOSE 8080
 
 # Use environment variables for JVM options
 ENV JAVA_OPTS="-Xmx512m -Xms256m"

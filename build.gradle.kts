@@ -20,7 +20,7 @@ tasks.withType<org.springframework.boot.gradle.tasks.bundling.BootJar> {
 }
 
 tasks.withType<Jar> {
-	enabled = false
+	enabled = true
 }
 
 repositories {
