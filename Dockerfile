@@ -5,12 +5,12 @@ FROM eclipse-temurin:24-jdk-alpine AS build
 
 WORKDIR /app
 
-# Install Gradle
+# Install Gradle 8.14
 RUN apk add --no-cache wget unzip && \
-    wget https://services.gradle.org/distributions/gradle-8.12-bin.zip && \
-    unzip gradle-8.12-bin.zip && \
-    rm gradle-8.12-bin.zip && \
-    mv gradle-8.12 /opt/gradle
+    wget https://services.gradle.org/distributions/gradle-8.14-bin.zip && \
+    unzip gradle-8.14-bin.zip && \
+    rm gradle-8.14-bin.zip && \
+    mv gradle-8.14 /opt/gradle
 
 ENV GRADLE_HOME=/opt/gradle
 ENV PATH=$PATH:$GRADLE_HOME/bin
@@ -25,8 +25,8 @@ RUN gradle dependencies --no-daemon || true
 # Copy source code
 COPY src ./src
 
-# Build the application
-RUN gradle clean bootJar --no-daemon
+# Build the application with native access flag to suppress warnings
+RUN gradle clean bootJar --no-daemon -Dorg.gradle.jvmargs="--enable-native-access=ALL-UNNAMED"
 
 # Stage 2: Runtime stage
 FROM eclipse-temurin:24-jre-alpine
