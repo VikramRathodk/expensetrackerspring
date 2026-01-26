@@ -33,15 +33,26 @@ FROM eclipse-temurin:24-jre-alpine
 
 WORKDIR /app
 
+# Install PostgreSQL client for wait script
+RUN apk add --no-cache postgresql-client bash
+
 # Create non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
-USER spring:spring
 
 # Copy the built jar from build stage
 COPY --from=build /app/build/libs/*.jar app.jar
 
+# Copy wait script
+COPY wait-for-postgres.sh /wait-for-postgres.sh
+RUN chmod +x /wait-for-postgres.sh
+
+# Change ownership
+RUN chown -R spring:spring /app
+
+USER spring:spring
+
 # Expose port
 EXPOSE 8081
 
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Run the application with wait script
+ENTRYPOINT ["/wait-for-postgres.sh", "postgres", "java", "-jar", "app.jar"]
