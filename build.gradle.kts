@@ -15,6 +15,13 @@ java {
 		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
+tasks.withType<org.springframework.boot.gradle.tasks.bundling.BootJar> {
+	enabled = true
+}
+
+tasks.withType<Jar> {
+	enabled = false
+}
 
 repositories {
 	mavenCentral()
