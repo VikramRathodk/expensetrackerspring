@@ -39,6 +39,11 @@ dependencies {
 
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 
+
+
+	implementation("io.github.cdimascio:dotenv-kotlin:6.4.1")
+
+
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-websocket-test")

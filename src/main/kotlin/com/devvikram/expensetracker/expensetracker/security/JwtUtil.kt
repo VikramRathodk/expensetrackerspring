@@ -16,11 +16,12 @@ import java.util.*
 @Component
 class JwtUtil {
 
-    @Value("\${jwt.secret:mySecretKeyForJwtTokenGenerationMustBe256BitsLongForHS256Algorithm}")
-    private lateinit var secret: String
+    @Value($$"${jwt.secret}")
+    lateinit var secret: String
 
-    @Value("\${jwt.expiration:86400000}") // 24 hours in milliseconds
-    private var expiration: Long = 86400000
+    @Value($$"${jwt.expiration:86400000}")
+    var expiration: Long = 86400000
+
 
     private fun getSigningKey(): Key {
         return Keys.hmacShaKeyFor(secret.toByteArray())
