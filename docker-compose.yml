@@ -2,62 +2,36 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: expensetracker-db
     environment:
       POSTGRES_DB: expensetracker
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
+      POSTGRES_USER: expenseuser
+      POSTGRES_PASSWORD: expensepass
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - expense-network
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d expensetracker"]
+      test: ["CMD-SHELL", "pg_isready -U expenseuser -d expensetracker"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  expensetracker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  app:
+    build: .
     container_name: expensetracker-app
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/expensetracker
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: 123456
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_SHOW_SQL: "true"
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      SERVER_PORT: 8081
-      SPRING_APPLICATION_NAME: expensetracker
-      JWT_SECRET: mySecretKeyForJwtTokenGenerationMustBe256BitsLongForHS256AlgorithmSecureKey123
-      JWT_EXPIRATION: 86400000
-      SPRING_SECURITY_USER_NAME: admin
-      SPRING_SECURITY_USER_PASSWORD: admin123
-      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
-      LOGGING_LEVEL_COM_DEVVIKRAM_EXPENSETRACKER: DEBUG
-      SERVER_ERROR_INCLUDE_MESSAGE: always
-      SERVER_ERROR_INCLUDE_BINDING_ERRORS: always
-      SERVER_ERROR_INCLUDE_STACKTRACE: on_param
-      SERVER_ERROR_INCLUDE_EXCEPTION: "false"
     ports:
       - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/expensetracker
+      SPRING_DATASOURCE_USERNAME: expenseuser
+      SPRING_DATASOURCE_PASSWORD: expensepass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "true"
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - expense-network
-    restart: unless-stopped
 
 volumes:
-  postgres_data:
-    driver: local
-
-networks:
-  expense-network:
-    driver: bridge
+  postgres-data:
