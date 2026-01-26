@@ -1,8 +1,6 @@
 # Multi-stage build for Kotlin Spring Boot application
-
 # Stage 1: Build stage
 FROM eclipse-temurin:21-jdk-alpine AS build
-
 WORKDIR /app
 
 # Install Gradle 8.14
@@ -31,21 +29,16 @@ RUN gradle clean bootJar --no-daemon
 
 # Stage 2: Runtime stage
 FROM eclipse-temurin:21-jre-alpine
-
 WORKDIR /app
 
-# Install bash and postgresql-client for wait script
-RUN apk add --no-cache bash postgresql-client
+# Install curl for health checks
+RUN apk add --no-cache curl
 
 # Create non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
 
 # Copy the built jar from build stage
 COPY --from=build /app/build/libs/*.jar app.jar
-
-# Copy wait script
-COPY wait-for-postgres.sh /wait-for-postgres.sh
-RUN chmod +x /wait-for-postgres.sh && chown spring:spring /wait-for-postgres.sh
 
 # Change ownership
 RUN chown -R spring:spring /app
@@ -57,7 +50,7 @@ EXPOSE 8081
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health || exit 1
+    CMD curl -f http://localhost:8081/actuator/health || exit 1
 
-# Run the application with wait script
-ENTRYPOINT ["/wait-for-postgres.sh", "postgres", "java", "-jar", "app.jar"]
+# Run the application
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
