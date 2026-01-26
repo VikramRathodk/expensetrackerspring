@@ -34,8 +34,8 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Install bash for wait script
-RUN apk add --no-cache bash
+# Install bash and postgresql-client for wait script
+RUN apk add --no-cache bash postgresql-client
 
 # Create non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
@@ -60,4 +60,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health || exit 1
 
 # Run the application with wait script
-ENTRYPOINT ["/wait-for-postgres.sh", "postgres:5432", "--", "java", "-jar", "app.jar"]
+ENTRYPOINT ["/wait-for-postgres.sh", "postgres", "java", "-jar", "app.jar"]
