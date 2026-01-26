@@ -6,8 +6,8 @@ services:
     container_name: expensetracker-db
     environment:
       POSTGRES_DB: expensetracker
-      POSTGRES_USER: expenseuser
-      POSTGRES_PASSWORD: expensepass
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "123456"
     ports:
       - "5432:5432"
     volumes:
@@ -15,33 +15,35 @@ services:
     networks:
       - expensetracker-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U expenseuser -d expensetracker"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d expensetracker"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: expensetracker-app
     ports:
       - "8081:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/expensetracker
-      SPRING_DATASOURCE_USERNAME: expenseuser
-      SPRING_DATASOURCE_PASSWORD: expensepass
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: "123456"
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_SHOW_SQL: "true"
-      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
     networks:
       - expensetracker-network
     depends_on:
       postgres:
         condition: service_healthy
-    restart: on-failure
+    restart: unless-stopped
 
 volumes:
   postgres-data:
+    driver: local
 
 networks:
   expensetracker-network:

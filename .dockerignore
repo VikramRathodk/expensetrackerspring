@@ -1,12 +1,32 @@
+# Build outputs
 build/
+target/
+out/
 .gradle/
+
+# IDE files
 .idea/
-*.iml
 .vscode/
-.git/
-.gitignore
-*.log
+*.iml
+*.iws
+*.ipr
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+*.md
 README.md
-docs/
+
+# Logs
+*.log
