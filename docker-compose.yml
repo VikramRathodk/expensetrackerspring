@@ -8,6 +8,7 @@ services:
       POSTGRES_DB: expensetracker
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "123456"
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
@@ -16,9 +17,9 @@ services:
       - expensetracker-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d expensetracker"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
       start_period: 10s
 
   app:
@@ -39,7 +40,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
+    restart: on-failure:5
 
 volumes:
   postgres-data:

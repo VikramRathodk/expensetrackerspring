@@ -6,10 +6,13 @@ set -e
 host="$1"
 shift
 
-until PGPASSWORD=$SPRING_DATASOURCE_PASSWORD psql -h "$host" -U "$SPRING_DATASOURCE_USERNAME" -d postgres -c '\q' 2>/dev/null; do
-  >&2 echo "Postgres is unavailable - sleeping"
+echo "Waiting for PostgreSQL at $host..."
+
+# Wait for PostgreSQL to accept connections
+until pg_isready -h "$host" -U postgres 2>/dev/null; do
+  echo "Postgres is unavailable - sleeping"
   sleep 2
 done
 
->&2 echo "Postgres is up - executing command"
+echo "Postgres is up - executing command"
 exec "$@"
