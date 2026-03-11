@@ -1,0 +1,538 @@
+================================================================================
+         PRODUCTION ISSUES & SUGGESTIONS - EXPENSE TRACKER SPRING
+================================================================================
+Scanned on : 2026-03-01
+Severity   : [CRITICAL] [HIGH] [MEDIUM] [LOW]
+================================================================================
+
+
+================================================================================
+1. SECURITY ISSUES
+================================================================================
+
+[CRITICAL] S-01 : ANYONE CAN SELF-ASSIGN ADMIN ROLES AT REGISTRATION
+------------------------------------------------------------------------------
+File    : dto/request/RegisterRequest.kt  +  service/AuthService.kt
+Problem : RegisterRequest exposes a `roles: Set<RoleType>?` field. The register
+          endpoint (POST /api/auth/register) is PUBLIC. Any anonymous user can
+          send { "roles": ["SUPER_ADMIN"] } and get full admin access.
+          AuthService.register() blindly adds whatever roles are in the request.
+Fix     : Remove the `roles` field from RegisterRequest entirely.
+          Role assignment must only happen through POST /api/auth/assign-roles
+          which is already protected by @IsSuperAdmin.
+
+[CRITICAL] S-02 : HARDCODED SUPER ADMIN CREDENTIALS IN SOURCE CODE
+------------------------------------------------------------------------------
+File    : config/DataInitializer.kt
+Problem : Super Admin email ("rathodvikramk382@gmail.com") and password ("test123")
+          are hardcoded in source code. This is committed to git and visible to
+          anyone with repository access. "test123" is also a dangerously weak
+          password.
+Fix     : Load admin email and password from environment variables:
+            ADMIN_EMAIL, ADMIN_PASSWORD
+          Reference them via @Value or application.properties.
+
+[CRITICAL] S-03 : WEAK JWT SECRET FALLBACK IN SOURCE CODE
+------------------------------------------------------------------------------
+File    : application.properties  line 11
+Problem : jwt.secret=${JWT_SECRET:myLocalDevSecretKey123456789}
+          If JWT_SECRET env var is not set, the app falls back to a hardcoded
+          29-character secret. HS256 requires at least 256 bits (32 bytes).
+          This fallback key is also visible in the git repository.
+Fix     : Remove the fallback default. Make JWT_SECRET a required env var.
+          Add startup validation that fails fast if JWT_SECRET is absent or
+          too short (< 32 characters).
+
+[HIGH] S-04 : CORS WILDCARD ON EXPENSE ENDPOINT
+------------------------------------------------------------------------------
+File    : controllers/ExpenseController.kt  line 21
+Problem : @CrossOrigin(origins = ["*"]) allows requests from any domain.
+          In production this exposes the API to CSRF-style attacks from any
+          malicious website.
+Fix     : Restrict origins to the actual frontend domain(s) via a centralized
+          CORS configuration bean in SecurityConfig, using the allowed origins
+          from an environment variable (e.g. ALLOWED_ORIGINS).
+
+[HIGH] S-05 : NO RATE LIMITING ON LOGIN ENDPOINT
+------------------------------------------------------------------------------
+File    : controllers/AuthController.kt  (POST /api/auth/login)
+Problem : There is no rate limiting or account lockout after repeated failed
+          login attempts. The endpoint is vulnerable to brute-force and
+          credential stuffing attacks.
+Fix     : Add rate limiting using Spring's Bucket4j integration or a custom
+          filter. Lock the account after N failed attempts and add a cooldown.
+
+[HIGH] S-06 : NO TOKEN REVOCATION / BLACKLIST
+------------------------------------------------------------------------------
+File    : security/JwtUtil.kt, security/JwtAuthenticationFilter.kt
+Problem : Once a JWT is issued it is valid until expiry (24 hours) regardless
+          of logout, role change, or account deactivation. If a user's role is
+          changed via assign-roles, the old token still carries the old roles
+          and grants stale access for up to 24 hours.
+Fix     : Implement a token blacklist (Redis or DB table) to track revoked JTIs.
+          Validate the JTI on every request. Also add a logout endpoint that
+          blacklists the current token.
+
+[HIGH] S-07 : STACK TRACES AND INTERNAL MESSAGES EXPOSED IN PRODUCTION
+------------------------------------------------------------------------------
+File    : src/main/resources/application.properties
+Problem : server.error.include-message=always
+          server.error.include-stacktrace=on_param
+          These settings expose internal exception messages always, and full
+          stack traces when the client passes ?trace=true. This leaks
+          implementation details to attackers.
+Fix     : server.error.include-message=never
+          server.error.include-stacktrace=never
+          server.error.include-exception=false
+
+[MEDIUM] S-08 : PASSWORD POLICY TOO WEAK
+------------------------------------------------------------------------------
+File    : dto/request/RegisterRequest.kt  line 20
+Problem : Password only requires 6 characters with no complexity requirements
+          (uppercase, lowercase, digit, special character). Too weak for
+          a production financial application.
+Fix     : Increase minimum to 8 characters and add a regex pattern constraint
+          requiring at least one digit and one special character.
+
+[MEDIUM] S-09 : EXPIREQUEST.USERID EXPOSED AS CLIENT FIELD
+------------------------------------------------------------------------------
+File    : dto/request/ExpenseRequest.kt  line 17
+Problem : `userId` is a public field in ExpenseRequest with @Positive validation.
+          Even though the controller overrides it with the authenticated user's
+          ID, the @Positive validation runs BEFORE the controller method, so
+          the client MUST send a valid userId (> 0) in the request body.
+          This is confusing API design and leaks the concept of internal IDs
+          to the client.
+Fix     : Remove `userId` from ExpenseRequest entirely. Derive it from
+          @AuthenticationPrincipal only inside the controller/service.
+
+
+================================================================================
+2. ROLE & ACCESS CONTROL ISSUES
+================================================================================
+
+[CRITICAL] R-01 : REGULAR USERS CANNOT CREATE CATEGORIES
+------------------------------------------------------------------------------
+File    : controllers/UserCategoryController.kt  line 19-21
+Problem : UserCategoryController is annotated with @IsAuthenticated AND
+          @IsSuperAdmin. The @IsSuperAdmin annotation requires ROLE_SUPER_ADMIN,
+          making it impossible for regular USER role holders to create or manage
+          their personal categories. The ACCOUNTANT, MODERATOR, and VIEWER roles
+          are also blocked. This appears to be an unintentional restriction.
+Fix     : Remove @IsSuperAdmin from UserCategoryController. The controller
+          already uses @IsAuthenticated. Ownership enforcement inside
+          CategoryService is sufficient.
+
+[HIGH] R-02 : ACCOUNTANT ROLE IS DEFINED BUT NEVER ENFORCED
+------------------------------------------------------------------------------
+File    : enums/RoleType.kt, controllers/ReportController.kt
+Problem : RoleType.ACCOUNTANT is documented as having "financial reports access"
+          but ReportController is locked to @IsSuperAdmin only. The ACCOUNTANT
+          role cannot access any reports endpoint, making it non-functional.
+Fix     : Change ReportController to allow both SUPER_ADMIN and ACCOUNTANT:
+            @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ACCOUNTANT')")
+
+[MEDIUM] R-03 : MODERATOR ROLE IS DEFINED BUT NEVER USED
+------------------------------------------------------------------------------
+File    : enums/RoleType.kt, security/anotation/IsModerator.kt
+Problem : MODERATOR is documented as being able to "view all users' data"
+          but no endpoint uses @IsModerator or grants moderators any access.
+          The role is a dead declaration.
+Fix     : Either implement moderator-specific endpoints (e.g., view all users'
+          expenses), or remove the role from the system to avoid confusion.
+
+[MEDIUM] R-04 : VIEWER ROLE IS DEFINED BUT NEVER USED
+------------------------------------------------------------------------------
+File    : enums/RoleType.kt
+Problem : RoleType.VIEWER ("Read-only access") has no associated access control
+          on any endpoint. Any VIEWER-role user has zero access beyond what an
+          unauthenticated user has.
+Fix     : Map VIEWER to read-only GET endpoints, or remove it from the system.
+
+
+================================================================================
+3. DATA & SCHEMA ISSUES
+================================================================================
+
+[CRITICAL] D-01 : DDL-AUTO=UPDATE IN PRODUCTION IS DANGEROUS
+------------------------------------------------------------------------------
+File    : src/main/resources/application.properties  line 16
+Problem : spring.jpa.hibernate.ddl-auto=update allows Hibernate to modify the
+          database schema automatically. In production this can:
+          - Drop columns silently when entities change
+          - Cause data loss on renames
+          - Fail in unpredictable ways on multi-instance deployments
+Fix     : Set ddl-auto=validate (detects drift but never changes schema).
+          Adopt Flyway or Liquibase for controlled, versioned schema migrations.
+
+[HIGH] D-02 : DELETING A GLOBAL CATEGORY WILL BREAK EXISTING EXPENSES
+------------------------------------------------------------------------------
+File    : service/CategoryService.kt  (deleteGlobalCategory),
+          entity/Expense.kt  (category field - not nullable, no cascade)
+Problem : Expenses hold a NOT NULL FK to Category. If an admin deletes a
+          global category that is already referenced by expenses, the database
+          will throw a FK constraint violation at runtime.
+Fix     : Before deleting, check if any expense references the category.
+          Either block deletion with a clear error, or implement soft-delete
+          (add an `isDeleted` flag) so the category is hidden but data
+          integrity is preserved.
+
+[HIGH] D-03 : NO UPDATED_AT TRACKING ON EXPENSES OR USERS
+------------------------------------------------------------------------------
+File    : entity/Expense.kt, entity/User.kt
+Problem : Expense has no `updatedAt` field. After a PUT /expenses/{id}, there
+          is no record of when the expense was last modified. User.updatedAt
+          exists but is set only at object construction - it is never updated
+          when the entity is saved via .copy(), so it always reflects the
+          creation time.
+Fix     : Add @UpdateTimestamp (Hibernate) or use Spring Data's @LastModifiedDate
+          with @EntityListeners(AuditingEntityListener::class) on both entities.
+
+[MEDIUM] D-04 : NO SOFT DELETE FOR EXPENSES
+------------------------------------------------------------------------------
+File    : service/ExpenseService.kt  (deleteExpense), entity/Expense.kt
+Problem : Expenses are hard-deleted from the database. In a financial
+          application, permanently deleting records makes audit trails
+          impossible and can violate financial record-keeping requirements.
+Fix     : Add an `isDeleted: Boolean = false` and `deletedAt: LocalDateTime?`
+          field to Expense. Filter out deleted records in all queries.
+          Provide a restore or permanent-delete endpoint for admins.
+
+[LOW] D-05 : CATEGORY TABLE UNIQUE CONSTRAINT DOES NOT COVER GLOBAL CATEGORIES
+------------------------------------------------------------------------------
+File    : entity/Category.kt  (UniqueConstraint on name + user_id)
+Problem : The DB-level unique constraint is on (name, user_id). For global
+          categories, user_id is null. Most databases treat NULL as unique in
+          composite constraints, so multiple global categories with the same
+          name could be inserted at the DB level if the application-level check
+          is bypassed (e.g., concurrent requests).
+Fix     : Add a separate partial unique index on the DB for global categories:
+            CREATE UNIQUE INDEX unq_global_cat_name ON categories (name)
+            WHERE is_global = true;
+          Manage this via a Flyway migration.
+
+
+================================================================================
+4. PERFORMANCE ISSUES
+================================================================================
+
+[HIGH] P-01 : DATABASE CALL ON EVERY AUTHENTICATED REQUEST TO RESOLVE USER ID
+------------------------------------------------------------------------------
+File    : controllers/ExpenseController.kt (getUserIdFromAuth),
+          controllers/ReportController.kt (getUserId),
+          controllers/AdminCategoryController.kt,
+          controllers/UserCategoryController.kt
+Problem : Every authenticated endpoint calls userRepository.findByEmail() to
+          convert the email from the JWT principal into a userId. This is a
+          redundant database round-trip on EVERY request, because the userId
+          is already stored inside the JWT claims (JwtUtil.generateToken()
+          adds "userId" to the token).
+Fix     : Extract userId directly from the JWT token in the filter and expose
+          it via a custom Authentication object or a custom @AuthenticationPrincipal
+          resolver, eliminating the DB lookup.
+
+[HIGH] P-02 : NO PAGINATION SIZE LIMIT - UNBOUNDED QUERIES POSSIBLE
+------------------------------------------------------------------------------
+File    : controllers/ExpenseController.kt  line 30
+Problem : GET /api/expenses accepts `size` as a query param with no upper bound.
+          A client can send ?size=1000000 and force a full table scan response,
+          causing memory exhaustion and slow queries.
+Fix     : Cap the maximum page size:
+            val safeSize = size.coerceIn(1, 100)
+
+[MEDIUM] P-03 : N+1 QUERY RISK IN loadUserById()
+------------------------------------------------------------------------------
+File    : service/CustomUserDetailsService.kt  line 42
+Problem : loadUserById() calls userRepository.findById() which does NOT JOIN
+          FETCH the roles collection (only findByEmailWithRoles() does this).
+          When roles are accessed afterwards, Hibernate will issue a separate
+          SELECT per user. The method is unused in the current request flow
+          but would cause N+1 issues if wired in.
+Fix     : Add a findByIdWithRoles() method to UserRepository using
+          @Query with LEFT JOIN FETCH u.roles, mirroring findByEmailWithRoles().
+
+[MEDIUM] P-04 : ObjectMapper INSTANTIATED ON EVERY UNAUTHENTICATED REQUEST
+------------------------------------------------------------------------------
+File    : security/JwtAuthenticationEntryPoint.kt  line 30
+Problem : new ObjectMapper() is called inside the commence() method which
+          fires on every 401 response. ObjectMapper is expensive to construct
+          and should be a shared singleton.
+Fix     : Inject ObjectMapper as a constructor dependency (Spring auto-configures
+          one as a bean).
+
+[LOW] P-05 : HIKARI POOL SETTINGS MAY BE INSUFFICIENT UNDER LOAD
+------------------------------------------------------------------------------
+File    : src/main/resources/application.properties
+Problem : maximum-pool-size=10 is fine for low traffic but will become a
+          bottleneck under concurrent load. connection-timeout=20000 ms means
+          requests can wait up to 20 seconds for a connection before failing.
+Fix     : Tune pool size based on expected concurrency and DB server capacity.
+          Consider lowering connection-timeout to 5000 ms and adding
+          max-lifetime=1800000 (30 min) to prevent stale connections.
+
+
+================================================================================
+5. CODE QUALITY & ARCHITECTURE ISSUES
+================================================================================
+
+[HIGH] C-01 : ExpenseSpecifications.build() REFERENCES NON-EXISTENT "user" FIELD
+------------------------------------------------------------------------------
+File    : specifications/ExpenseSpecifications.kt  line 122
+Problem : root.get<User>("user").get<Long>("id") — the Expense entity has no
+          `user` association. It only has `userId: Long`. This will throw a
+          PathException at runtime when the custom report endpoint is called.
+Fix     : Change to: criteriaBuilder.equal(root.get<Long>("userId"), userId)
+          (same pattern used in filterByUserId())
+
+[HIGH] C-02 : REPORT REPOSITORY EXTENDS JpaRepository<Expense, Long>
+------------------------------------------------------------------------------
+File    : repository/ReportRepository.kt  line 15
+Problem : Both ExpenseRepository and ReportRepository extend
+          JpaRepository<Expense, Long>. This means there are two Spring Data
+          repositories managing the same entity and table. This is unnecessary,
+          confusing, and can lead to unexpected behaviour with Spring's
+          entity graph resolution.
+Fix     : Move the @Query report methods into ExpenseRepository directly,
+          or make ReportRepository extend a plain Repository<Expense, Long>
+          (no CRUD methods). Delete ReportRepository and ReportService, merging
+          the logic into ExpenseService.
+
+[HIGH] C-03 : CONTROLLERS ACCEPT RAW ENTITY OBJECTS AS REQUEST BODY
+------------------------------------------------------------------------------
+File    : controllers/AdminCategoryController.kt  line 29
+          controllers/UserCategoryController.kt  line 31
+Problem : Both category controllers accept `Category` (the JPA entity) directly
+          as the @RequestBody. This leaks the internal entity structure to the
+          API surface, makes it impossible to add server-side defaults without
+          touching the entity, and could allow clients to inject persistent
+          fields (e.g., `id`, `isGlobal`, `createdAt`).
+Fix     : Create a `CategoryRequest` DTO with only the fields clients should
+          provide (name, description). Map to the entity inside the service.
+
+[MEDIUM] C-04 : IllegalArgumentException FROM SERVICE MAPS TO HTTP 500
+------------------------------------------------------------------------------
+File    : service/AuthService.kt, exceptions/GlobalExceptionHandler.kt
+Problem : AuthService throws IllegalArgumentException for business-rule
+          violations (e.g., "Email already registered", "Invalid email or
+          password"). GlobalExceptionHandler does not have a handler for
+          IllegalArgumentException, so it falls through to the generic Exception
+          handler and returns HTTP 500 instead of HTTP 400.
+Fix     : Add an @ExceptionHandler(IllegalArgumentException::class) to
+          GlobalExceptionHandler that returns HTTP 400.
+          Better yet, replace IllegalArgumentException with the custom
+          BadRequestException already defined in the exceptions package.
+
+[MEDIUM] C-05 : TRY-CATCH BLOCKS IN CONTROLLER CONFLICT WITH GLOBAL HANDLER
+------------------------------------------------------------------------------
+File    : controllers/ExpenseController.kt
+Problem : Every method wraps logic in try-catch and returns hardcoded HTTP
+          status codes. This duplicates error handling that GlobalExceptionHandler
+          already provides and produces inconsistent HTTP status codes
+          (e.g., returning 400 for a 500-class error).
+Fix     : Remove the try-catch blocks in ExpenseController and let exceptions
+          propagate to GlobalExceptionHandler, which handles them consistently.
+
+[MEDIUM] C-06 : LOGGER INSTANTIATED INSIDE A METHOD BODY
+------------------------------------------------------------------------------
+File    : controllers/AuthController.kt  line 76
+Problem : LoggerFactory.getLogger(this::class.java) is called inside
+          assignRoles() on every request. Logger creation is expensive and
+          should be a class-level property.
+Fix     : Move the logger to a class-level private val:
+            private val logger = LoggerFactory.getLogger(this::class.java)
+
+[MEDIUM] C-07 : RoleService.createRoleIfNotExists() HAS A RACE CONDITION
+------------------------------------------------------------------------------
+File    : service/RoleService.kt  line 23
+Problem : The check existsByName() → save() pattern is not atomic. In a
+          multi-instance or parallel-startup scenario (e.g., two Docker
+          containers starting simultaneously), both instances can pass the
+          existence check before either saves, resulting in a duplicate key
+          DB error.
+Fix     : Use INSERT ... ON CONFLICT DO NOTHING (native query) or wrap in a
+          @Transactional with isolation = SERIALIZABLE, or catch the
+          DataIntegrityViolationException and ignore it.
+
+[LOW] C-08 : EnvConfig ONLY LOADS JWT_SECRET, NOT DATABASE VARIABLES
+------------------------------------------------------------------------------
+File    : config/EnvConfig.kt
+Problem : EnvConfig loads JWT_SECRET from the .env file into System properties,
+          but DATABASE_URL, PGUSER, and PGPASSWORD are not loaded the same way.
+          They must already be system environment variables before the app
+          starts, making .env file support incomplete and inconsistent.
+Fix     : Either load all required variables (DATABASE_URL, PGUSER, PGPASSWORD,
+          JWT_SECRET, PORT) from dotenv, or document that .env only supplements
+          JWT_SECRET and all others must be real environment variables.
+
+[LOW] C-09 : User.updatedAt IS NEVER ACTUALLY UPDATED
+------------------------------------------------------------------------------
+File    : entity/User.kt  line 37
+Problem : updatedAt is set to LocalDateTime.now() only at object construction.
+          When the entity is updated via .copy() or save(), updatedAt retains
+          the original creation time, making the field meaningless.
+Fix     : Annotate updatedAt with @UpdateTimestamp or use Spring Auditing
+          (@LastModifiedDate) to ensure it is refreshed on every save.
+
+
+================================================================================
+6. MISSING PRODUCTION FEATURES
+================================================================================
+
+[HIGH] F-01 : NO REFRESH TOKEN MECHANISM
+------------------------------------------------------------------------------
+Problem : JWT tokens expire after 24 hours and there is no refresh token flow.
+          Users must re-login after expiry. In a production app, silent token
+          refresh is expected.
+Fix     : Issue a short-lived access token (15 min) and a long-lived refresh
+          token (7-30 days). Provide POST /api/auth/refresh to exchange a
+          valid refresh token for a new access token.
+
+[HIGH] F-02 : NO TESTS
+------------------------------------------------------------------------------
+File    : src/test/kotlin/.../ExpensetrackerApplicationTests.kt
+Problem : Only a single empty test class exists. There are zero unit tests,
+          integration tests, or repository tests. Deploying to production
+          without tests makes regressions impossible to detect automatically.
+Fix     : Add unit tests for AuthService, ExpenseService, CategoryService.
+          Add integration tests using @SpringBootTest + TestContainers
+          (PostgreSQL) for controllers and repositories.
+          Target at minimum 70% code coverage.
+
+[MEDIUM] F-03 : NO EMAIL VERIFICATION ON REGISTRATION
+------------------------------------------------------------------------------
+Problem : Any email address can be registered without verification. This allows
+          fake accounts, typo emails, and spam registrations.
+Fix     : Send a verification email with a time-limited token on registration.
+          Block login until the email is verified (or set isActive=false until
+          verified).
+
+[MEDIUM] F-04 : NO PASSWORD RESET FUNCTIONALITY
+------------------------------------------------------------------------------
+Problem : There is no "forgot password" flow. A user who loses their password
+          has no recovery option.
+Fix     : Add POST /api/auth/forgot-password and POST /api/auth/reset-password
+          endpoints using time-limited, single-use reset tokens sent via email.
+
+[MEDIUM] F-05 : isActive FLAG EXISTS BUT NO ADMIN ENDPOINT TO USE IT
+------------------------------------------------------------------------------
+File    : entity/User.kt  line 33
+Problem : User.isActive is checked in login and loadUserByUsername, but there
+          is no endpoint to activate or deactivate users. An admin cannot
+          suspend a user's account through the API.
+Fix     : Add PATCH /api/admin/users/{id}/status endpoint (SUPER_ADMIN only)
+          to toggle isActive. Also force revocation of active tokens when
+          deactivating.
+
+[MEDIUM] F-06 : NO AUDIT TRAIL
+------------------------------------------------------------------------------
+Problem : There is no record of who created/updated/deleted an expense, who
+          assigned roles, or who deleted a category. For a financial application
+          this is a compliance and debugging gap.
+Fix     : Add createdBy/updatedBy fields (Spring Data Auditing with
+          @CreatedBy / @LastModifiedBy), or maintain a separate AuditLog entity
+          that records action, entityType, entityId, actorId, timestamp.
+
+[LOW] F-07 : NO REQUEST TRACING / CORRELATION IDS
+------------------------------------------------------------------------------
+Problem : There is no request ID or correlation ID in logs or responses.
+          Debugging production issues across distributed logs is very difficult.
+Fix     : Add a servlet filter that generates a UUID correlation ID per request,
+          adds it to the MDC, logs it, and includes it in response headers
+          (X-Correlation-Id).
+
+[LOW] F-08 : NO API DOCUMENTATION
+------------------------------------------------------------------------------
+Problem : There is no Swagger/OpenAPI documentation. API consumers have no
+          self-service reference for endpoints, request/response shapes, or
+          authentication requirements.
+Fix     : Add springdoc-openapi-starter-webmvc-ui dependency and annotate
+          controllers with @Operation, @ApiResponse etc.
+
+
+================================================================================
+7. LOGGING ISSUES
+================================================================================
+
+[HIGH] L-01 : SQL AND PARAMETER VALUES LOGGED IN PRODUCTION
+------------------------------------------------------------------------------
+File    : src/main/resources/application.properties  lines 37-39
+Problem : logging.level.org.hibernate.SQL=DEBUG and
+          logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+          cause Hibernate to log every SQL query and every bound parameter
+          value (including passwords and sensitive financial amounts) in
+          production logs.
+Fix     : These levels are acceptable in development profiles only. Use Spring
+          profiles (application-prod.properties) and set:
+            logging.level.org.hibernate.SQL=WARN
+            logging.level.org.hibernate.type.descriptor.sql.BasicBinder=WARN
+          in production.
+
+[MEDIUM] L-02 : NO SPRING PROFILES CONFIGURED
+------------------------------------------------------------------------------
+Problem : The application has a single application.properties used for both
+          development and production. Debug logging, stack traces, and SQL
+          verbosity that are useful locally are harmful in production.
+Fix     : Create profile-specific files:
+            application-dev.properties  (verbose logging, h2 or local pg)
+            application-prod.properties (WARN-level logging, strict security)
+          Activate via SPRING_PROFILES_ACTIVE env var.
+
+
+================================================================================
+SUMMARY TABLE
+================================================================================
+
+  ID     Severity  Category  Title
+  ------ --------- --------- ---------------------------------------------------
+  S-01   CRITICAL  Security  Anyone can self-assign ADMIN roles at registration
+  S-02   CRITICAL  Security  Hardcoded super admin credentials in source code
+  S-03   CRITICAL  Security  Weak JWT secret with hardcoded fallback
+  D-01   CRITICAL  Data      ddl-auto=update is dangerous in production
+  R-01   CRITICAL  Roles     Regular users cannot create categories (@IsSuperAdmin)
+  C-01   HIGH      Code      ExpenseSpecifications.build() references missing "user" field
+  C-02   HIGH      Code      Two JPA repositories for same Expense entity
+  C-03   HIGH      Code      Controllers accept raw entity as request body
+  S-04   HIGH      Security  CORS wildcard on expense endpoints
+  S-05   HIGH      Security  No rate limiting on login endpoint
+  S-06   HIGH      Security  No token revocation / blacklist on logout/role change
+  S-07   HIGH      Security  Stack traces exposed in production config
+  R-02   HIGH      Roles     ACCOUNTANT role defined but cannot access reports
+  D-02   HIGH      Data      Deleting category breaks existing expenses (FK violation)
+  D-03   HIGH      Data      No updatedAt tracking on expenses
+  P-01   HIGH      Perf      DB call on every request to resolve userId from email
+  P-02   HIGH      Perf      No pagination size limit (unbounded queries)
+  F-01   HIGH      Feature   No refresh token mechanism
+  F-02   HIGH      Feature   Zero tests in project
+  L-01   HIGH      Logging   SQL + parameter values logged in production
+  C-04   MEDIUM    Code      IllegalArgumentException maps to HTTP 500
+  C-05   MEDIUM    Code      try-catch in controllers conflicts with global handler
+  C-06   MEDIUM    Code      Logger instantiated inside method body on every call
+  C-07   MEDIUM    Code      createRoleIfNotExists() has a race condition
+  D-04   MEDIUM    Data      No soft delete for financial records
+  D-05   MEDIUM    Data      Global category uniqueness not enforced at DB level
+  P-03   MEDIUM    Perf      N+1 risk in loadUserById() - roles not eagerly fetched
+  P-04   MEDIUM    Perf      ObjectMapper instantiated on every 401 response
+  R-03   MEDIUM    Roles     MODERATOR role defined but never used
+  R-04   MEDIUM    Roles     VIEWER role defined but never used
+  S-08   MEDIUM    Security  Password policy too weak (min 6 chars, no complexity)
+  S-09   MEDIUM    Security  userId exposed as client-editable field in ExpenseRequest
+  F-03   MEDIUM    Feature   No email verification on registration
+  F-04   MEDIUM    Feature   No password reset functionality
+  F-05   MEDIUM    Feature   isActive flag with no admin endpoint to use it
+  F-06   MEDIUM    Feature   No audit trail for financial operations
+  L-02   MEDIUM    Logging   No Spring profiles (dev vs prod config mixed)
+  C-08   LOW       Code      EnvConfig only loads JWT_SECRET, not all env vars
+  C-09   LOW       Code      User.updatedAt is never actually updated after saves
+  P-05   LOW       Perf      HikariCP pool settings not tuned for production load
+  F-07   LOW       Feature   No request correlation IDs for distributed tracing
+  F-08   LOW       Feature   No API documentation (Swagger/OpenAPI)
+
+  Total Issues : 40
+  Critical     :  5
+  High         : 16
+  Medium       : 15
+  Low          :  4
+
+================================================================================
+END OF SUGGESTIONS DOCUMENT
+================================================================================
