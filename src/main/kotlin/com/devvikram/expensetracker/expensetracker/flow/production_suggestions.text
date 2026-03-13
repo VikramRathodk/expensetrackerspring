@@ -1,8 +1,10 @@
 ================================================================================
          PRODUCTION ISSUES & SUGGESTIONS - EXPENSE TRACKER SPRING
 ================================================================================
-Scanned on : 2026-03-01
-Severity   : [CRITICAL] [HIGH] [MEDIUM] [LOW]
+Scanned on  : 2026-03-01
+Updated on  : 2026-03-12  (re-scan)
+Severity    : [CRITICAL] [HIGH] [MEDIUM] [LOW]
+Status tags : [RESOLVED] items have been fixed since the last scan
 ================================================================================
 
 
@@ -32,16 +34,13 @@ Fix     : Load admin email and password from environment variables:
             ADMIN_EMAIL, ADMIN_PASSWORD
           Reference them via @Value or application.properties.
 
-[CRITICAL] S-03 : WEAK JWT SECRET FALLBACK IN SOURCE CODE
+[RESOLVED] S-03 : WEAK JWT SECRET FALLBACK IN SOURCE CODE
 ------------------------------------------------------------------------------
-File    : application.properties  line 11
-Problem : jwt.secret=${JWT_SECRET:myLocalDevSecretKey123456789}
-          If JWT_SECRET env var is not set, the app falls back to a hardcoded
-          29-character secret. HS256 requires at least 256 bits (32 bytes).
-          This fallback key is also visible in the git repository.
-Fix     : Remove the fallback default. Make JWT_SECRET a required env var.
-          Add startup validation that fails fast if JWT_SECRET is absent or
-          too short (< 32 characters).
+File    : application.properties
+Status  : FIXED — jwt.secret=${JWT_SECRET} (no fallback default). JWT_SECRET
+          is now a required env var enforced by EnvConfig at startup. If absent,
+          the application fails fast with an IllegalStateException.
+          Remaining gap: no minimum-length validation (< 32 chars) yet.
 
 [HIGH] S-04 : CORS WILDCARD ON EXPENSE ENDPOINT
 ------------------------------------------------------------------------------
@@ -73,17 +72,15 @@ Fix     : Implement a token blacklist (Redis or DB table) to track revoked JTIs.
           Validate the JTI on every request. Also add a logout endpoint that
           blacklists the current token.
 
-[HIGH] S-07 : STACK TRACES AND INTERNAL MESSAGES EXPOSED IN PRODUCTION
+[RESOLVED] S-07 : STACK TRACES AND INTERNAL MESSAGES EXPOSED IN PRODUCTION
 ------------------------------------------------------------------------------
-File    : src/main/resources/application.properties
-Problem : server.error.include-message=always
-          server.error.include-stacktrace=on_param
-          These settings expose internal exception messages always, and full
-          stack traces when the client passes ?trace=true. This leaks
-          implementation details to attackers.
-Fix     : server.error.include-message=never
-          server.error.include-stacktrace=never
-          server.error.include-exception=false
+File    : src/main/resources/application-prod.properties
+Status  : FIXED — application-prod.properties now sets:
+            server.error.include-message=never
+            server.error.include-binding-errors=never
+            server.error.include-stacktrace=never
+            server.error.include-exception=false
+          Dev profile still exposes full details locally (intentional).
 
 [MEDIUM] S-08 : PASSWORD POLICY TOO WEAK
 ------------------------------------------------------------------------------
@@ -93,6 +90,19 @@ Problem : Password only requires 6 characters with no complexity requirements
           a production financial application.
 Fix     : Increase minimum to 8 characters and add a regex pattern constraint
           requiring at least one digit and one special character.
+
+[MEDIUM] S-10 : SPRING SECURITY DEFAULT IN-MEMORY CREDENTIALS IN application.properties
+------------------------------------------------------------------------------
+File    : src/main/resources/application.properties  lines 29-30
+Problem : spring.security.user.name=admin and spring.security.user.password=admin123
+          are hardcoded in application.properties and committed to source control.
+          Although CustomUserDetailsService overrides the auto-configured
+          UserDetailsService (so these credentials are currently inactive), their
+          presence is misleading, commits plaintext credentials to git history, and
+          creates risk if the custom UserDetailsService is ever removed or bypassed.
+Fix     : Remove both lines from application.properties entirely.
+          The project uses JWT + CustomUserDetailsService; Spring Boot's default
+          in-memory user configuration is not needed.
 
 [MEDIUM] S-09 : EXPIREQUEST.USERID EXPOSED AS CLIENT FIELD
 ------------------------------------------------------------------------------
@@ -154,16 +164,13 @@ Fix     : Map VIEWER to read-only GET endpoints, or remove it from the system.
 3. DATA & SCHEMA ISSUES
 ================================================================================
 
-[CRITICAL] D-01 : DDL-AUTO=UPDATE IN PRODUCTION IS DANGEROUS
+[RESOLVED] D-01 : DDL-AUTO=UPDATE IN PRODUCTION IS DANGEROUS
 ------------------------------------------------------------------------------
-File    : src/main/resources/application.properties  line 16
-Problem : spring.jpa.hibernate.ddl-auto=update allows Hibernate to modify the
-          database schema automatically. In production this can:
-          - Drop columns silently when entities change
-          - Cause data loss on renames
-          - Fail in unpredictable ways on multi-instance deployments
-Fix     : Set ddl-auto=validate (detects drift but never changes schema).
-          Adopt Flyway or Liquibase for controlled, versioned schema migrations.
+File    : src/main/resources/application-prod.properties
+Status  : FIXED — ddl-auto is now profile-scoped:
+            application-dev.properties  -> ddl-auto=update  (local dev only)
+            application-prod.properties -> ddl-auto=validate (production safe)
+          Remaining gap: no Flyway/Liquibase for controlled schema versioning.
 
 [HIGH] D-02 : DELETING A GLOBAL CATEGORY WILL BREAK EXISTING EXPENSES
 ------------------------------------------------------------------------------
@@ -309,18 +316,14 @@ Problem : Both category controllers accept `Category` (the JPA entity) directly
 Fix     : Create a `CategoryRequest` DTO with only the fields clients should
           provide (name, description). Map to the entity inside the service.
 
-[MEDIUM] C-04 : IllegalArgumentException FROM SERVICE MAPS TO HTTP 500
+[RESOLVED] C-04 : IllegalArgumentException FROM SERVICE MAPS TO HTTP 500
 ------------------------------------------------------------------------------
-File    : service/AuthService.kt, exceptions/GlobalExceptionHandler.kt
-Problem : AuthService throws IllegalArgumentException for business-rule
-          violations (e.g., "Email already registered", "Invalid email or
-          password"). GlobalExceptionHandler does not have a handler for
-          IllegalArgumentException, so it falls through to the generic Exception
-          handler and returns HTTP 500 instead of HTTP 400.
-Fix     : Add an @ExceptionHandler(IllegalArgumentException::class) to
-          GlobalExceptionHandler that returns HTTP 400.
-          Better yet, replace IllegalArgumentException with the custom
-          BadRequestException already defined in the exceptions package.
+File    : exceptions/GlobalExceptionHandler.kt
+Status  : FIXED — @ExceptionHandler(IllegalArgumentException::class) added,
+          now returns HTTP 401 with the exception message.
+          Note: HTTP 401 was chosen over the suggested HTTP 400. Consider
+          whether HTTP 400 would be more appropriate for business-rule
+          violations vs authentication failures.
 
 [MEDIUM] C-05 : TRY-CATCH BLOCKS IN CONTROLLER CONFLICT WITH GLOBAL HANDLER
 ------------------------------------------------------------------------------
@@ -353,16 +356,14 @@ Fix     : Use INSERT ... ON CONFLICT DO NOTHING (native query) or wrap in a
           @Transactional with isolation = SERIALIZABLE, or catch the
           DataIntegrityViolationException and ignore it.
 
-[LOW] C-08 : EnvConfig ONLY LOADS JWT_SECRET, NOT DATABASE VARIABLES
+[RESOLVED] C-08 : EnvConfig ONLY LOADED JWT_SECRET, NOT ALL ENV VARS
 ------------------------------------------------------------------------------
 File    : config/EnvConfig.kt
-Problem : EnvConfig loads JWT_SECRET from the .env file into System properties,
-          but DATABASE_URL, PGUSER, and PGPASSWORD are not loaded the same way.
-          They must already be system environment variables before the app
-          starts, making .env file support incomplete and inconsistent.
-Fix     : Either load all required variables (DATABASE_URL, PGUSER, PGPASSWORD,
-          JWT_SECRET, PORT) from dotenv, or document that .env only supplements
-          JWT_SECRET and all others must be real environment variables.
+Status  : FIXED — EnvConfig now loads all 5 required variables via dotenv:
+            JWT_SECRET, DATABASE_URL, PGUSER, PGPASSWORD, PORT
+          Each is validated: if any is blank/missing the app fails fast with
+          an IllegalStateException listing the missing variable names.
+          All variables can now be supplied via .env file or OS environment.
 
 [LOW] C-09 : User.updatedAt IS NEVER ACTUALLY UPDATED
 ------------------------------------------------------------------------------
@@ -453,85 +454,89 @@ Fix     : Add springdoc-openapi-starter-webmvc-ui dependency and annotate
 7. LOGGING ISSUES
 ================================================================================
 
-[HIGH] L-01 : SQL AND PARAMETER VALUES LOGGED IN PRODUCTION
+[RESOLVED] L-01 : SQL AND PARAMETER VALUES LOGGED IN PRODUCTION
 ------------------------------------------------------------------------------
-File    : src/main/resources/application.properties  lines 37-39
-Problem : logging.level.org.hibernate.SQL=DEBUG and
-          logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
-          cause Hibernate to log every SQL query and every bound parameter
-          value (including passwords and sensitive financial amounts) in
-          production logs.
-Fix     : These levels are acceptable in development profiles only. Use Spring
-          profiles (application-prod.properties) and set:
-            logging.level.org.hibernate.SQL=WARN
-            logging.level.org.hibernate.type.descriptor.sql.BasicBinder=WARN
-          in production.
+File    : src/main/resources/application-dev.properties /
+          src/main/resources/application-prod.properties
+Status  : FIXED — SQL/parameter logging is now profile-scoped:
+            application-dev.properties  → hibernate.SQL=DEBUG, BasicBinder=TRACE
+            application-prod.properties → hibernate.SQL=WARN,  BasicBinder=WARN
+          Base application.properties no longer contains any Hibernate log levels;
+          it only sets logging.level.org.springframework.security=INFO globally.
 
-[MEDIUM] L-02 : NO SPRING PROFILES CONFIGURED
+[RESOLVED] L-02 : NO SPRING PROFILES CONFIGURED
 ------------------------------------------------------------------------------
-Problem : The application has a single application.properties used for both
-          development and production. Debug logging, stack traces, and SQL
-          verbosity that are useful locally are harmful in production.
-Fix     : Create profile-specific files:
-            application-dev.properties  (verbose logging, h2 or local pg)
-            application-prod.properties (WARN-level logging, strict security)
-          Activate via SPRING_PROFILES_ACTIVE env var.
+File    : src/main/resources/application-dev.properties /
+          src/main/resources/application-prod.properties
+Status  : FIXED — both profile files now exist and are active:
+            application-dev.properties  → ddl-auto=update, full SQL/error logging,
+                                          stack traces exposed
+            application-prod.properties → ddl-auto=validate, WARN-level logging,
+                                          all error details suppressed from client
+          Activate the desired profile via SPRING_PROFILES_ACTIVE env var.
+          Remaining gap: default profile (no SPRING_PROFILES_ACTIVE set) uses
+          neither file, so ddl-auto and logging levels fall back to Spring Boot
+          defaults — ensure SPRING_PROFILES_ACTIVE is always set in deployments.
 
 
 ================================================================================
 SUMMARY TABLE
 ================================================================================
 
-  ID     Severity  Category  Title
-  ------ --------- --------- ---------------------------------------------------
-  S-01   CRITICAL  Security  Anyone can self-assign ADMIN roles at registration
-  S-02   CRITICAL  Security  Hardcoded super admin credentials in source code
-  S-03   CRITICAL  Security  Weak JWT secret with hardcoded fallback
-  D-01   CRITICAL  Data      ddl-auto=update is dangerous in production
-  R-01   CRITICAL  Roles     Regular users cannot create categories (@IsSuperAdmin)
-  C-01   HIGH      Code      ExpenseSpecifications.build() references missing "user" field
-  C-02   HIGH      Code      Two JPA repositories for same Expense entity
-  C-03   HIGH      Code      Controllers accept raw entity as request body
-  S-04   HIGH      Security  CORS wildcard on expense endpoints
-  S-05   HIGH      Security  No rate limiting on login endpoint
-  S-06   HIGH      Security  No token revocation / blacklist on logout/role change
-  S-07   HIGH      Security  Stack traces exposed in production config
-  R-02   HIGH      Roles     ACCOUNTANT role defined but cannot access reports
-  D-02   HIGH      Data      Deleting category breaks existing expenses (FK violation)
-  D-03   HIGH      Data      No updatedAt tracking on expenses
-  P-01   HIGH      Perf      DB call on every request to resolve userId from email
-  P-02   HIGH      Perf      No pagination size limit (unbounded queries)
-  F-01   HIGH      Feature   No refresh token mechanism
-  F-02   HIGH      Feature   Zero tests in project
-  L-01   HIGH      Logging   SQL + parameter values logged in production
-  C-04   MEDIUM    Code      IllegalArgumentException maps to HTTP 500
-  C-05   MEDIUM    Code      try-catch in controllers conflicts with global handler
-  C-06   MEDIUM    Code      Logger instantiated inside method body on every call
-  C-07   MEDIUM    Code      createRoleIfNotExists() has a race condition
-  D-04   MEDIUM    Data      No soft delete for financial records
-  D-05   MEDIUM    Data      Global category uniqueness not enforced at DB level
-  P-03   MEDIUM    Perf      N+1 risk in loadUserById() - roles not eagerly fetched
-  P-04   MEDIUM    Perf      ObjectMapper instantiated on every 401 response
-  R-03   MEDIUM    Roles     MODERATOR role defined but never used
-  R-04   MEDIUM    Roles     VIEWER role defined but never used
-  S-08   MEDIUM    Security  Password policy too weak (min 6 chars, no complexity)
-  S-09   MEDIUM    Security  userId exposed as client-editable field in ExpenseRequest
-  F-03   MEDIUM    Feature   No email verification on registration
-  F-04   MEDIUM    Feature   No password reset functionality
-  F-05   MEDIUM    Feature   isActive flag with no admin endpoint to use it
-  F-06   MEDIUM    Feature   No audit trail for financial operations
-  L-02   MEDIUM    Logging   No Spring profiles (dev vs prod config mixed)
-  C-08   LOW       Code      EnvConfig only loads JWT_SECRET, not all env vars
-  C-09   LOW       Code      User.updatedAt is never actually updated after saves
-  P-05   LOW       Perf      HikariCP pool settings not tuned for production load
-  F-07   LOW       Feature   No request correlation IDs for distributed tracing
-  F-08   LOW       Feature   No API documentation (Swagger/OpenAPI)
+  ID     Severity  Status    Category  Title
+  ------ --------- --------- --------- -----------------------------------------------
+  S-01   CRITICAL  OPEN      Security  Anyone can self-assign ADMIN roles at registration
+  S-02   CRITICAL  OPEN      Security  Hardcoded super admin credentials in source code
+  S-03   CRITICAL  RESOLVED  Security  Weak JWT secret with hardcoded fallback
+  D-01   CRITICAL  RESOLVED  Data      ddl-auto=update is dangerous in production
+  R-01   CRITICAL  OPEN      Roles     Regular users cannot create categories (@IsSuperAdmin)
+  C-01   HIGH      OPEN      Code      ExpenseSpecifications.build() references missing "user" field
+  C-02   HIGH      OPEN      Code      Two JPA repositories for same Expense entity
+  C-03   HIGH      OPEN      Code      Controllers accept raw entity as request body
+  S-04   HIGH      OPEN      Security  CORS wildcard on expense endpoints
+  S-05   HIGH      OPEN      Security  No rate limiting on login endpoint
+  S-06   HIGH      OPEN      Security  No token revocation / blacklist on logout/role change
+  S-07   HIGH      RESOLVED  Security  Stack traces exposed in production config
+  R-02   HIGH      OPEN      Roles     ACCOUNTANT role defined but cannot access reports
+  D-02   HIGH      OPEN      Data      Deleting category breaks existing expenses (FK violation)
+  D-03   HIGH      OPEN      Data      No updatedAt tracking on expenses
+  P-01   HIGH      OPEN      Perf      DB call on every request to resolve userId from email
+  P-02   HIGH      OPEN      Perf      No pagination size limit (unbounded queries)
+  F-01   HIGH      OPEN      Feature   No refresh token mechanism
+  F-02   HIGH      OPEN      Feature   Zero tests in project
+  L-01   HIGH      RESOLVED  Logging   SQL + parameter values logged in production
+  C-04   MEDIUM    RESOLVED  Code      IllegalArgumentException maps to HTTP 500
+  C-05   MEDIUM    OPEN      Code      try-catch in controllers conflicts with global handler
+  C-06   MEDIUM    OPEN      Code      Logger instantiated inside method body on every call
+  C-07   MEDIUM    OPEN      Code      createRoleIfNotExists() has a race condition
+  D-04   MEDIUM    OPEN      Data      No soft delete for financial records
+  P-03   MEDIUM    OPEN      Perf      N+1 risk in loadUserById() - roles not eagerly fetched
+  P-04   MEDIUM    OPEN      Perf      ObjectMapper instantiated on every 401 response
+  R-03   MEDIUM    OPEN      Roles     MODERATOR role defined but never used
+  R-04   MEDIUM    OPEN      Roles     VIEWER role defined but never used
+  S-08   MEDIUM    OPEN      Security  Password policy too weak (min 6 chars, no complexity)
+  S-09   MEDIUM    OPEN      Security  userId exposed as client-editable field in ExpenseRequest
+  S-10   MEDIUM    OPEN      Security  Spring Security default credentials hardcoded in config
+  F-03   MEDIUM    OPEN      Feature   No email verification on registration
+  F-04   MEDIUM    OPEN      Feature   No password reset functionality
+  F-05   MEDIUM    OPEN      Feature   isActive flag with no admin endpoint to use it
+  F-06   MEDIUM    OPEN      Feature   No audit trail for financial operations
+  L-02   MEDIUM    RESOLVED  Logging   No Spring profiles (dev vs prod config mixed)
+  C-08   LOW       RESOLVED  Code      EnvConfig only loads JWT_SECRET, not all env vars
+  C-09   LOW       OPEN      Code      User.updatedAt is never actually updated after saves
+  D-05   LOW       OPEN      Data      Global category uniqueness not enforced at DB level
+  P-05   LOW       OPEN      Perf      HikariCP pool settings not tuned for production load
+  F-07   LOW       OPEN      Feature   No request correlation IDs for distributed tracing
+  F-08   LOW       OPEN      Feature   No API documentation (Swagger/OpenAPI)
 
-  Total Issues : 40
-  Critical     :  5
-  High         : 16
-  Medium       : 15
-  Low          :  4
+  Total Issues : 43  (includes 7 resolved)
+  Open Issues  : 36
+    Critical   :  3
+    High       : 13
+    Medium     : 15
+    Low        :  5
+  Resolved     :  7  (S-03, D-01, S-07, L-01, L-02, C-04, C-08)
+  New this scan:  1  (S-10 — hardcoded Spring Security credentials)
 
 ================================================================================
 END OF SUGGESTIONS DOCUMENT

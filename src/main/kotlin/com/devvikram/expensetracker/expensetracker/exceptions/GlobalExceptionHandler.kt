@@ -15,6 +15,8 @@ import java.security.SignatureException
 @RestControllerAdvice
 class GlobalExceptionHandler {
 
+    private val logger = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
+
     // 🔹 404 - Resource Not Found
     @ExceptionHandler(ResourceNotFoundException::class)
     fun handleResourceNotFound(
@@ -144,16 +146,31 @@ class GlobalExceptionHandler {
         )
     }
 
+    // 🔹 401 - Invalid credentials / illegal argument
+    @ExceptionHandler(IllegalArgumentException::class)
+    fun handleIllegalArgument(
+        ex: IllegalArgumentException
+    ): ResponseEntity<ApiResponse<Nothing>> =
+        ResponseEntity(
+            ApiResponse(
+                status = false,
+                message = ex.message ?: "Invalid request"
+            ),
+            HttpStatus.UNAUTHORIZED
+        )
+
     // 🔹 500 - Internal Server Error (fallback)
     @ExceptionHandler(Exception::class)
     fun handleGenericException(
         ex: Exception
-    ): ResponseEntity<ApiResponse<Nothing>> =
-        ResponseEntity(
+    ): ResponseEntity<ApiResponse<Nothing>> {
+        logger.error("Unhandled exception", ex)
+        return ResponseEntity(
             ApiResponse(
                 status = false,
                 message = "Internal server error"
             ),
             HttpStatus.INTERNAL_SERVER_ERROR
         )
+    }
 }

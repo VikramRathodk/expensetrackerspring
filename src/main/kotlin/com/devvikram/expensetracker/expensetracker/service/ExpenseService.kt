@@ -2,6 +2,7 @@ package com.devvikram.expensetracker.expensetracker.service
 
 
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
+import com.devvikram.expensetracker.expensetracker.exceptions.BadRequestException
 import com.devvikram.expensetracker.expensetracker.entity.Expense
 import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseFilterRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.ExpenseResponse
@@ -16,7 +17,11 @@ import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 
 @Service
-class ExpenseService(private val expenseRepository: ExpenseRepository,private val categoryRepository: CategoryRepository) {
+class ExpenseService(
+    private val expenseRepository: ExpenseRepository,
+    private val categoryRepository: CategoryRepository,
+    private val budgetService: BudgetService
+) {
 
     fun getAllExpensesPaginated(
         userId: Long,
@@ -101,19 +106,21 @@ class ExpenseService(private val expenseRepository: ExpenseRepository,private va
 
 
     fun createExpense(request: ExpenseRequest): ExpenseResponse {
+        val check = budgetService.checkBudgetOnExpense(request.userId, request.categoryId, request.amount)
+        if (check.shouldBlock) throw BadRequestException(check.warnings.joinToString(". "))
 
         val category = categoryRepository.findById(request.categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
-        val expense = Expense(
-            title = request.title,
-            amount = request.amount,
-            userId = request.userId,
-            note = request.note,
-            category = category
-        )
-
-        return expenseRepository.save(expense).toResponse()
+        return expenseRepository.save(
+            Expense(
+                title = request.title,
+                amount = request.amount,
+                userId = request.userId,
+                note = request.note,
+                category = category
+            )
+        ).toResponse()
     }
 
 

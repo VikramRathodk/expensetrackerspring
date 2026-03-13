@@ -1,0 +1,724 @@
+{
+  "info": {
+    "name": "Expense Tracker — Budget API",
+    "_postman_id": "expense-tracker-budget-collection",
+    "description": "Complete Postman collection for all Budget endpoints.\n\nSetup:\n1. Import this collection.\n2. Create an environment with variables: `base_url`, `token`, `budget_id`.\n3. Run 'Login' from the Auth folder first — the test script auto-saves the token.\n4. All budget requests use Bearer token auth inherited from the collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "budget_id",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth (prerequisite)",
+      "item": [
+        {
+          "name": "Login — get token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Token saved:', json.data.token);",
+                  "} else {",
+                  "    console.warn('Login failed — no token in response');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login and auto-save JWT token to collection variable `token`.\nUpdate email/password to match a seeded user."
+          },
+          "response": [
+            {
+              "name": "200 — Login success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"user\": {\n      \"id\": 1,\n      \"name\": \"Admin\",\n      \"email\": \"admin@example.com\",\n      \"roles\": [\"ADMIN\"]\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Budget",
+      "item": [
+        {
+          "name": "Create Budget — category-scoped monthly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.message).to.eql('Budget created successfully');",
+                  "});",
+                  "pm.test('Budget has correct fields', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.amount).to.eql(5000.0);",
+                  "    pm.expect(data.period).to.eql('MONTHLY');",
+                  "    pm.expect(data.isActive).to.be.true;",
+                  "    pm.expect(data.spent).to.eql(0.0);",
+                  "    pm.expect(data.remaining).to.eql(5000.0);",
+                  "    pm.expect(data.percentUsed).to.eql(0.0);",
+                  "});",
+                  "// Save id for subsequent requests",
+                  "var id = pm.response.json().data.id;",
+                  "if (id) pm.collectionVariables.set('budget_id', id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": 1,\n  \"amount\": 5000.0,\n  \"period\": \"MONTHLY\",\n  \"startDate\": \"2026-03-01\",\n  \"alertThreshold\": 0.80\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Creates a category-scoped monthly budget.\n\n**period values:** DAILY | WEEKLY | MONTHLY | YEARLY\n**alertThreshold:** 0.0–1.0 (default 0.80 = 80%)\n**categoryId:** null = overall budget"
+          },
+          "response": [
+            {
+              "name": "201 — Budget created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"categoryId\": 1,\n    \"categoryName\": \"Food\",\n    \"amount\": 5000.0,\n    \"period\": \"MONTHLY\",\n    \"startDate\": \"2026-03-01\",\n    \"endDate\": null,\n    \"alertThreshold\": 0.8,\n    \"isActive\": true,\n    \"spent\": 0.0,\n    \"remaining\": 5000.0,\n    \"percentUsed\": 0.0,\n    \"createdAt\": \"2026-03-13T10:00:00\"\n  }\n}"
+            },
+            {
+              "name": "404 — Category not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Category with id 9999 not found\"\n}"
+            },
+            {
+              "name": "401 — Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Unauthorized\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Budget — overall (no category)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('categoryId is null for overall budget', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.categoryId).to.be.null;",
+                  "    pm.expect(data.categoryName).to.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": null,\n  \"amount\": 20000.0,\n  \"period\": \"MONTHLY\",\n  \"startDate\": \"2026-03-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Creates an overall (non-category) budget. `categoryId: null` means this budget tracks total spending across all categories."
+          },
+          "response": [
+            {
+              "name": "201 — Overall budget created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget created successfully\",\n  \"data\": {\n    \"id\": 2,\n    \"categoryId\": null,\n    \"categoryName\": null,\n    \"amount\": 20000.0,\n    \"period\": \"MONTHLY\",\n    \"startDate\": \"2026-03-01\",\n    \"endDate\": null,\n    \"alertThreshold\": 0.8,\n    \"isActive\": true,\n    \"spent\": 0.0,\n    \"remaining\": 20000.0,\n    \"percentUsed\": 0.0,\n    \"createdAt\": \"2026-03-13T10:00:00\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Budget — with endDate and all periods",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('endDate is present', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.endDate).to.not.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": 1,\n  \"amount\": 3000.0,\n  \"period\": \"WEEKLY\",\n  \"startDate\": \"2026-03-10\",\n  \"endDate\": \"2026-06-30\",\n  \"alertThreshold\": 0.75\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Creates a weekly budget with a fixed end date. Change `period` to test DAILY / WEEKLY / MONTHLY / YEARLY."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Budgets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns array', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});",
+                  "pm.test('All budgets are active and not deleted', function () {",
+                  "    pm.response.json().data.forEach(function (b) {",
+                  "        pm.expect(b.isActive).to.be.true;",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Returns all active, non-deleted budgets for the authenticated user.\nInactive or soft-deleted budgets are excluded."
+          },
+          "response": [
+            {
+              "name": "200 — List of budgets",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budgets fetched successfully\",\n  \"data\": [\n    {\n      \"id\": 1,\n      \"categoryId\": 1,\n      \"categoryName\": \"Food\",\n      \"amount\": 5000.0,\n      \"period\": \"MONTHLY\",\n      \"startDate\": \"2026-03-01\",\n      \"endDate\": null,\n      \"alertThreshold\": 0.8,\n      \"isActive\": true,\n      \"spent\": 1500.0,\n      \"remaining\": 3500.0,\n      \"percentUsed\": 30.0,\n      \"createdAt\": \"2026-03-13T10:00:00\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 — Empty list",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budgets fetched successfully\",\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Budget Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Status response has all required fields', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.property('id');",
+                  "    pm.expect(data).to.have.property('limit');",
+                  "    pm.expect(data).to.have.property('spent');",
+                  "    pm.expect(data).to.have.property('remaining');",
+                  "    pm.expect(data).to.have.property('percentUsed');",
+                  "    pm.expect(data).to.have.property('isOverBudget');",
+                  "    pm.expect(data).to.have.property('isNearLimit');",
+                  "});",
+                  "pm.test('remaining is never negative', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.remaining).to.be.at.least(0);",
+                  "});",
+                  "pm.test('isOverBudget is true when spent >= limit', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    if (data.spent >= data.limit) {",
+                  "        pm.expect(data.isOverBudget).to.be.true;",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}", "status"]
+            },
+            "description": "Returns live spend status for a single budget.\n\nResponse fields:\n- `limit` — the budget amount cap\n- `spent` — total expenses in current period\n- `remaining` — `max(limit - spent, 0)`\n- `percentUsed` — `(spent / limit) * 100`\n- `isOverBudget` — `spent >= limit`\n- `isNearLimit` — `percentUsed >= alertThreshold * 100`"
+          },
+          "response": [
+            {
+              "name": "200 — Within budget",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget status fetched successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"categoryId\": 1,\n    \"categoryName\": \"Food\",\n    \"limit\": 5000.0,\n    \"spent\": 1500.0,\n    \"remaining\": 3500.0,\n    \"percentUsed\": 30.0,\n    \"isOverBudget\": false,\n    \"isNearLimit\": false\n  }\n}"
+            },
+            {
+              "name": "200 — Near limit",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget status fetched successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"categoryId\": 1,\n    \"categoryName\": \"Food\",\n    \"limit\": 5000.0,\n    \"spent\": 4300.0,\n    \"remaining\": 700.0,\n    \"percentUsed\": 86.0,\n    \"isOverBudget\": false,\n    \"isNearLimit\": true\n  }\n}"
+            },
+            {
+              "name": "200 — Over budget",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget status fetched successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"categoryId\": 1,\n    \"categoryName\": \"Food\",\n    \"limit\": 5000.0,\n    \"spent\": 5200.0,\n    \"remaining\": 0.0,\n    \"percentUsed\": 104.0,\n    \"isOverBudget\": true,\n    \"isNearLimit\": true\n  }\n}"
+            },
+            {
+              "name": "404 — Budget not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Budget with id 9999 not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Budget — amount only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Amount was updated', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.amount).to.eql(8000.0);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    pm.expect(pm.response.json().status).to.be.true;",
+                  "    pm.expect(pm.response.json().message).to.eql('Budget updated successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 8000.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}"]
+            },
+            "description": "Partial update — all fields in `UpdateBudgetRequest` are nullable.\nOnly include the fields you want to change.\n\nUpdatable fields: `amount`, `alertThreshold`, `endDate`, `isActive`.\n\nFields NOT updatable: `period`, `startDate`, `categoryId`."
+          },
+          "response": [
+            {
+              "name": "200 — Amount updated",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget updated successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"categoryId\": 1,\n    \"categoryName\": \"Food\",\n    \"amount\": 8000.0,\n    \"period\": \"MONTHLY\",\n    \"startDate\": \"2026-03-01\",\n    \"endDate\": null,\n    \"alertThreshold\": 0.8,\n    \"isActive\": true,\n    \"spent\": 1500.0,\n    \"remaining\": 6500.0,\n    \"percentUsed\": 18.75,\n    \"createdAt\": \"2026-03-13T10:00:00\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Budget — change alertThreshold",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('alertThreshold was updated', function () {",
+                  "    pm.expect(pm.response.json().data.alertThreshold).to.eql(0.9);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertThreshold\": 0.90\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}"]
+            },
+            "description": "Updates only the alert threshold to 90%. All other fields are unchanged."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Budget — deactivate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Budget is now inactive', function () {",
+                  "    pm.expect(pm.response.json().data.isActive).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}"]
+            },
+            "description": "Deactivates a budget. It will no longer appear in GET /api/budgets and will not enforce spend limits."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Budget — set endDate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('endDate is set', function () {",
+                  "    pm.expect(pm.response.json().data.endDate).to.eql('2026-06-30');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endDate\": \"2026-06-30\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}"]
+            },
+            "description": "Adds or changes the expiry date of an existing budget."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Budget (soft delete)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.message).to.eql('Budget deleted successfully');",
+                  "    pm.expect(json.data).to.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}"]
+            },
+            "description": "Soft-deletes the budget by setting `deletedAt = now()`.\nThe record remains in the database but is excluded from all queries.\n\nAfter deletion:\n- GET /api/budgets will not return it.\n- GET /api/budgets/{id}/status will return 404.\n- A second DELETE on the same id will also return 404."
+          },
+          "response": [
+            {
+              "name": "200 — Deleted",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget deleted successfully\",\n  \"data\": null\n}"
+            },
+            {
+              "name": "404 — Already deleted or not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Budget with id 1 not found\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "Create Budget — invalid categoryId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test('Error message mentions category id', function () {",
+                  "    pm.expect(pm.response.json().message).to.include('9999');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": 9999,\n  \"amount\": 5000.0,\n  \"period\": \"MONTHLY\",\n  \"startDate\": \"2026-03-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Expects 404 with message: \"Category with id 9999 not found\"."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Budget Status — not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/budgets/99999/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "99999", "status"]
+            },
+            "description": "Expects 404 for a non-existent budget id."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Budget — not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets/99999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "99999"]
+            },
+            "description": "Expects 404 for a non-existent budget id."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Budget — not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/budgets/99999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "99999"]
+            },
+            "description": "Expects 404 for a non-existent or already-deleted budget id."
+          },
+          "response": []
+        },
+        {
+          "name": "Any endpoint — no token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Sends request with no Authorization header. Expects 401 from JwtAuthenticationEntryPoint."
+          },
+          "response": [
+            {
+              "name": "401 — Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Unauthorized\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

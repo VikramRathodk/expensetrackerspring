@@ -1,16 +1,32 @@
 package com.devvikram.expensetracker.expensetracker.security
 
-
-
+import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
+import com.devvikram.expensetracker.expensetracker.repository.UserRepository
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.stereotype.Component
 
 @Component
-class SecurityUtil {
+class SecurityUtil(
+    private val userRepository: UserRepository
+) {
+
+    /**
+     * Get current authenticated user's ID.
+     * Looks up the user by email (the principal username) since the plain
+     * Spring Security User object stored as principal does not carry an id field.
+     */
+    fun getCurrentUserId(): Long {
+        val email = getCurrentUserEmail()
+            ?: throw ResourceNotFoundException("No authenticated user found")
+        return userRepository.findByEmail(email)
+            .orElseThrow { ResourceNotFoundException("User not found with email: $email") }
+            .id
+    }
 
     companion object {
+
         /**
          * Get current authenticated user's email
          */

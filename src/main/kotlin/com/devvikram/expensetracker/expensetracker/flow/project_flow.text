@@ -5,13 +5,13 @@
 PROJECT OVERVIEW
 ----------------
 Name        : Expense Tracker Spring
-Language    : Kotlin
+Language    : Kotlin 2.2.21
 Framework   : Spring Boot 4.0
 Database    : PostgreSQL
 Auth        : JWT (JSON Web Tokens)
 Build Tool  : Gradle (Kotlin DSL)
 Deployment  : Docker (containerized)
-Java        : JDK 21
+Java        : JDK 21 (toolchain) / Java 24.0.1 (local runtime)
 
 
 ================================================================================
@@ -21,6 +21,7 @@ TECHNOLOGY STACK
   - Spring Boot 4.0          -> Core framework, auto-configuration
   - Spring Security          -> Authentication & authorization (JWT-based)
   - Spring Data JPA          -> ORM layer with Hibernate + PostgreSQL dialect
+  - Spring WebSocket         -> WebSocket support
   - Spring Validation        -> Request body validation (@Valid)
   - JJWT (0.12.3)            -> JWT token creation and validation
   - PostgreSQL               -> Relational database
@@ -197,7 +198,7 @@ APPLICATION STARTUP FLOW
        b. initAdmin  -> Creates a Super Admin user (rathodvikramk382@gmail.com)
                         if not already present, or upgrades them to SUPER_ADMIN.
   6. Spring Security filter chain is ready.
-  7. Application listens on port 8080 (or ${PORT}).
+  7. Application listens on port 8081 (or ${PORT}).
 
 
 ================================================================================
@@ -432,16 +433,17 @@ EXCEPTION HANDLING
   GlobalExceptionHandler (@RestControllerAdvice) handles all exceptions
   and returns consistent ApiResponse<T> JSON format:
 
-  ResourceNotFoundException   -> HTTP 404  (entity not found)
-  BadRequestException         -> HTTP 400  (invalid request)
-  ConflictException           -> HTTP 409  (duplicate resource)
-  MethodArgumentNotValidException -> HTTP 400 (bean validation failure, with field errors)
-  UsernameNotFoundException   -> HTTP 404
-  AuthenticationException     -> HTTP 401
-  ExpiredJwtException         -> HTTP 401  ("JWT token has expired")
-  MalformedJwtException       -> HTTP 400  ("Invalid JWT token format")
-  SignatureException           -> HTTP 401  ("JWT signature validation failed")
-  Exception (fallback)        -> HTTP 500  ("Internal server error")
+  ResourceNotFoundException        -> HTTP 404  (entity not found)
+  BadRequestException              -> HTTP 400  (invalid request)
+  ConflictException                -> HTTP 409  (duplicate resource)
+  MethodArgumentNotValidException  -> HTTP 400  (bean validation failure, with field errors)
+  UsernameNotFoundException        -> HTTP 404
+  AuthenticationException          -> HTTP 401
+  ExpiredJwtException              -> HTTP 401  ("JWT token has expired")
+  MalformedJwtException            -> HTTP 400  ("Invalid JWT token format")
+  SignatureException               -> HTTP 401  ("JWT signature validation failed")
+  IllegalArgumentException         -> HTTP 401  ("Invalid request")
+  Exception (fallback)             -> HTTP 500  ("Internal server error")
 
   All responses follow the shape:
     { "status": false, "message": "...", "data": null }
@@ -489,14 +491,14 @@ DOCKER DEPLOYMENT
     PGUSER         -> DB username
     PGPASSWORD     -> DB password
     JWT_SECRET     -> JWT signing secret
-    PORT           -> Server port (default 8080)
+    PORT           -> Server port (default 8081)
 
 
 ================================================================================
 CONFIGURATION (application.properties)
 ================================================================================
 
-  server.port             -> ${PORT:8080}
+  server.port             -> ${PORT:8081}
   spring.datasource.url   -> ${DATABASE_URL}
   spring.datasource.username -> ${PGUSER}
   spring.datasource.password -> ${PGPASSWORD}
