@@ -55,9 +55,16 @@ class SecurityConfig(
             .authorizeHttpRequests { auth ->
                 auth
                     // Public endpoints
-                    .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
-                    .requestMatchers("/api/auth/roles").permitAll()
+                    .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login").permitAll()
+                    .requestMatchers("/api/v1/auth/roles").permitAll()
                     .requestMatchers("/error").permitAll()
+                    // Swagger / OpenAPI — no auth required
+                    .requestMatchers(
+                        "/swagger-ui/**",
+                        "/swagger-ui.html",
+                        "/v3/api-docs/**",
+                        "/v3/api-docs.yaml"
+                    ).permitAll()
                     // All other requests require authentication
                     .anyRequest().authenticated()
             }

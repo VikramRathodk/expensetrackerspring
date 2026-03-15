@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*
 import java.time.LocalDateTime
 
 @RestController
-@RequestMapping("/api/expenses")
+@RequestMapping("/api/v1/expenses")
 @CrossOrigin(origins = ["*"])
 @IsAuthenticated
 class ExpenseController(

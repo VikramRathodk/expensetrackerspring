@@ -10,5 +10,6 @@ data class ExpenseFilterRequest(
     val endDate: LocalDateTime? = null,
     val searchTitle: String? = null,
     val year: Int? = null,
-    val month: Int? = null
+    val month: Int? = null,
+    val tagIds: List<Long>? = null
 )

@@ -15,8 +15,7 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/categories")
-@IsAuthenticated
+@RequestMapping("/api/v1/categories")
 @IsSuperAdmin
 class UserCategoryController(
     private val categoryService: CategoryService,

@@ -36,6 +36,10 @@ data class User(
 
     val updatedAt: LocalDateTime = LocalDateTime.now(),
 
+    /** ISO 4217 currency code — all reports aggregate to this currency. */
+    @Column(name = "base_currency", nullable = false, length = 3)
+    val baseCurrency: String = "INR",
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "user_roles",

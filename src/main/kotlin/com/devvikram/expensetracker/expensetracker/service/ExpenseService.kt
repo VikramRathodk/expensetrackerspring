@@ -7,8 +7,13 @@ import com.devvikram.expensetracker.expensetracker.entity.Expense
 import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseFilterRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.ExpenseResponse
 import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseRequest
+import com.devvikram.expensetracker.expensetracker.dto.response.TagResponse
+import com.devvikram.expensetracker.expensetracker.entity.Tag
 import com.devvikram.expensetracker.expensetracker.repository.CategoryRepository
 import com.devvikram.expensetracker.expensetracker.repository.ExpenseRepository
+import com.devvikram.expensetracker.expensetracker.repository.TagRepository
+import com.devvikram.expensetracker.expensetracker.repository.UserRepository
+import com.devvikram.expensetracker.expensetracker.enums.AuditAction
 import com.devvikram.expensetracker.expensetracker.specifications.ExpenseSpecifications
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -20,7 +25,11 @@ import java.time.LocalDateTime
 class ExpenseService(
     private val expenseRepository: ExpenseRepository,
     private val categoryRepository: CategoryRepository,
-    private val budgetService: BudgetService
+    private val tagRepository: TagRepository,
+    private val userRepository: UserRepository,
+    private val exchangeRateService: ExchangeRateService,
+    private val budgetService: BudgetService,
+    private val auditLogService: AuditLogService
 ) {
 
     fun getAllExpensesPaginated(
@@ -112,15 +121,32 @@ class ExpenseService(
         val category = categoryRepository.findById(request.categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
-        return expenseRepository.save(
+        val tags = resolveTagsForUser(request.tagIds, request.userId)
+        val currency = request.currency.uppercase()
+        val baseCurrency = userRepository.findById(request.userId)
+            .map { it.baseCurrency }.orElse("INR")
+        val amountInBase = exchangeRateService.convert(request.amount, currency, baseCurrency)
+
+        val saved = expenseRepository.save(
             Expense(
-                title = request.title,
-                amount = request.amount,
-                userId = request.userId,
-                note = request.note,
-                category = category
+                title        = request.title,
+                amount       = request.amount,
+                currency     = currency,
+                amountInBase = amountInBase,
+                userId       = request.userId,
+                note         = request.note,
+                category     = category,
+                tags         = tags
             )
-        ).toResponse()
+        )
+        auditLogService.log(
+            userId     = saved.userId,
+            action     = AuditAction.EXPENSE_CREATED,
+            entityType = "Expense",
+            entityId   = saved.id,
+            newValue   = saved.toResponse()
+        )
+        return saved.toResponse()
     }
 
 
@@ -138,13 +164,31 @@ class ExpenseService(
         val category = categoryRepository.findById(request.categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
+        val tags = resolveTagsForUser(request.tagIds, userId)
+        val currency = request.currency.uppercase()
+        val baseCurrency = userRepository.findById(userId)
+            .map { it.baseCurrency }.orElse("INR")
+        val amountInBase = exchangeRateService.convert(request.amount, currency, baseCurrency)
+
         val updated = existing.copy(
-            title = request.title,
-            amount = request.amount,
-            category = category,
-            note = request.note
+            title        = request.title,
+            amount       = request.amount,
+            currency     = currency,
+            amountInBase = amountInBase,
+            category     = category,
+            note         = request.note,
+            tags         = tags
         )
-        return expenseRepository.save(updated).toResponse()
+        val saved = expenseRepository.save(updated)
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.EXPENSE_UPDATED,
+            entityType = "Expense",
+            entityId   = id,
+            oldValue   = existing.toResponse(),
+            newValue   = saved.toResponse()
+        )
+        return saved.toResponse()
     }
 
     fun deleteExpense(id: Long, userId: Long): Boolean {
@@ -152,17 +196,41 @@ class ExpenseService(
             .filter { it.userId == userId }
             .orElse(null) ?: return false
         expenseRepository.deleteById(id)
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.EXPENSE_DELETED,
+            entityType = "Expense",
+            entityId   = id,
+            oldValue   = expense.toResponse()
+        )
         return true
     }
 
+    private fun resolveTagsForUser(tagIds: List<Long>, userId: Long): MutableList<Tag> =
+        tagIds.mapNotNull { tagId ->
+            tagRepository.findById(tagId).orElse(null)
+                ?.takeIf { it.userId == userId }
+        }.toMutableList()
+
     private fun Expense.toResponse() = ExpenseResponse(
-        id = id,
-        title = title,
-        amount = amount,
-        categoryId = category.id,
+        id           = id,
+        title        = title,
+        amount       = amount,
+        currency     = currency,
+        amountInBase = amountInBase,
+        categoryId   = category.id,
         categoryName = category.name,
-        note = note,
-        createdAt = createdAt
+        note         = note,
+        createdAt    = createdAt,
+        tags         = tags.map { tag ->
+            TagResponse(
+                id        = tag.id,
+                name      = tag.name,
+                color     = tag.color,
+                userId    = tag.userId,
+                createdAt = tag.createdAt
+            )
+        }
     )
 
 }

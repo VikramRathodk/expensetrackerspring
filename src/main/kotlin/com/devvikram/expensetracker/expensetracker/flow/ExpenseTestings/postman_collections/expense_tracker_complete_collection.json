@@ -1,0 +1,2371 @@
+{
+  "info": {
+    "_postman_id": "et-complete-v1-2026",
+    "name": "Expense Tracker — Complete API",
+    "description": "Single collection covering every endpoint in the Expense Tracker Spring Boot application.\n\nFeatures:\n- Auth (register, login, roles, assign-roles, update base currency)\n- Expenses (CRUD + search + filters + tag filtering + multi-currency)\n- Categories (admin global + user-specific)\n- Budgets (CRUD + status)\n- Recurring Expenses (CRUD)\n- Reports (summary, category-wise, date-wise, custom, monthly trends, budget performance, insights, top-expenses, export CSV/PDF)\n- Tags (CRUD, per-user, many-to-many with expenses)\n- Exchange Rates (list rates, convert, manual sync — open.er-api.com, daily auto-sync at 01:00)\n- Audit Logs (all, mine, by-user, by-entity, by-action)\n- Notifications (list, unread, mark-read, delete)\n- Dashboard\n\nSetup:\n1. Import this collection.\n2. Set collection variable base_url to your server (default: http://localhost:8081).\n3. Run Login under Auth - the test script auto-saves the JWT to token.\n4. All other requests inherit Bearer auth from the collection level.\n5. Run 'Sync Exchange Rates' once (ADMIN) to load rates from open.er-api.com before using multi-currency expenses.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "Auto-filled by the Login request test script"
+    },
+    {
+      "key": "expense_id",
+      "value": "0",
+      "type": "string",
+      "description": "Auto-filled by Create Expense test script"
+    },
+    {
+      "key": "category_id",
+      "value": "0",
+      "type": "string",
+      "description": "Auto-filled by Create Global Category test script"
+    },
+    {
+      "key": "notification_id",
+      "value": "0",
+      "type": "string",
+      "description": "Auto-filled by Get All Notifications test script"
+    },
+    {
+      "key": "user_category_id",
+      "value": "0",
+      "type": "string",
+      "description": "Auto-filled by Create User Category test script"
+    },
+    {
+      "key": "budget_id",
+      "value": "0",
+      "type": "string",
+      "description": "Auto-filled by Create Budget test script"
+    },
+    {
+      "key": "recurring_id",
+      "value": "0",
+      "type": "string",
+      "description": "Auto-filled by Create Recurring Expense test script"
+    },
+    {
+      "key": "recurring_category_id",
+      "value": "1",
+      "type": "string",
+      "description": "Auto-filled by Create Recurring Expense pre-request script"
+    },
+    {
+      "key": "test_cat_name",
+      "value": "",
+      "type": "string",
+      "description": "Auto-filled by Create Global Category pre-request"
+    },
+    {
+      "key": "user_cat_name",
+      "value": "",
+      "type": "string",
+      "description": "Auto-filled by Create User Category pre-request"
+    },
+    {
+      "key": "target_user_id",
+      "value": "4",
+      "type": "string",
+      "description": "Used by SUPER_ADMIN endpoints that target another user"
+    },
+    {
+      "key": "entity_type",
+      "value": "Expense",
+      "type": "string",
+      "description": "Expense | Budget | RecurringExpense | Category"
+    },
+    {
+      "key": "entity_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "audit_action",
+      "value": "EXPENSE_CREATED",
+      "type": "string",
+      "description": "Any AuditAction enum value"
+    },
+    {
+      "key": "tag_id",
+      "value": "0",
+      "type": "string",
+      "description": "Auto-filled by Create Tag test script"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Registration, login, profile, roles management.\nPublic: register, login, roles.\nAuthenticated: me.\nSUPER_ADMIN: assign-roles.",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "description": "Create a new user account. Returns JWT token + user info."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"User registered successfully\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"user\": { \"id\": 1, \"name\": \"John Doe\", \"email\": \"john@example.com\", \"roles\": [\"USER\"], \"isActive\": true, \"createdAt\": \"2026-03-15T10:00:00\" }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Token saved:', json.data.token);",
+                  "} else {",
+                  "    console.warn('Login failed — no token in response');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"rathodvikramk382@gmail.com\",\n  \"password\": \"test123\"\n}"
+            },
+            "description": "Authenticate and receive a JWT. The test script auto-saves the token to the `token` collection variable. Uses SUPER_ADMIN credentials so all endpoints work correctly."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"user\": { \"id\": 1, \"name\": \"John Doe\", \"email\": \"john@example.com\", \"roles\": [\"USER\"], \"isActive\": true, \"createdAt\": \"2026-03-15T10:00:00\" }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Returns the authenticated user's email and authorities from the JWT."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"User details fetched\",\n  \"data\": {\n    \"email\": \"john@example.com\",\n    \"authorities\": [\"ROLE_USER\"]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Roles",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "roles"
+              ]
+            },
+            "description": "Returns all available role names. Public endpoint."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Roles fetched successfully\",\n  \"data\": [\"USER\", \"ADMIN\", \"SUPER_ADMIN\", \"MODERATOR\", \"ACCOUNTANT\", \"VIEWER\"]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Assign Roles (SUPER_ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/assign-roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "assign-roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{target_user_id}},\n  \"roles\": [\"SUPER_ADMIN\"]\n}"
+            },
+            "description": "Assign one or more roles to a user. Requires SUPER_ADMIN role."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Roles assigned successfully\",\n  \"data\": { \"id\": 2, \"name\": \"Jane\", \"email\": \"jane@example.com\", \"roles\": [\"USER\",\"ADMIN\"], \"isActive\": true, \"createdAt\": \"2026-03-10T09:00:00\" }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update My Base Currency",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"baseCurrency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me/currency",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me",
+                "currency"
+              ]
+            },
+            "description": "Update the authenticated user's base currency. All future expenses will have their amountInBase computed by converting from the expense currency to this base. Must be a valid 3-letter ISO 4217 code (e.g. INR, USD, EUR, GBP)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Expenses",
+      "description": "Full CRUD for expenses plus search and filter endpoints. All require authentication.",
+      "item": [
+        {
+          "name": "Get All Expenses (Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses?page=0&size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Zero-based page index"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Records per page"
+                }
+              ]
+            },
+            "description": "Returns paginated expenses for the authenticated user, sorted by createdAt DESC."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Expenses fetched successfully\",\n  \"data\": {\n    \"content\": [{ \"id\": 1, \"title\": \"Grocery\", \"amount\": 500.0, \"categoryId\": 1, \"categoryName\": \"Food\", \"note\": null, \"createdAt\": \"2026-03-15T12:00:00\" }],\n    \"totalElements\": 1, \"totalPages\": 1, \"number\": 0, \"size\": 10\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Expense",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Fetch first available category to use a valid categoryId",
+                  "pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('base_url') + '/api/v1/categories',",
+                  "    method: 'GET',",
+                  "    header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('token') }",
+                  "}, function(err, res) {",
+                  "    if (!err) {",
+                  "        var json = res.json();",
+                  "        if (json.data && json.data.length > 0) {",
+                  "            pm.collectionVariables.set('category_id', json.data[0].id);",
+                  "            console.log('category_id set from categories:', json.data[0].id);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('expense_id', json.data.id);",
+                  "    console.log('expense_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Grocery Shopping\",\n  \"amount\": 850.00,\n  \"categoryId\": {{category_id}},\n  \"userId\": 1,\n  \"note\": \"Weekly groceries\"\n}"
+            },
+            "description": "Create a new expense. `userId` is overridden by the server with the authenticated user's ID. Budget check runs before save."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Expense created successfully\",\n  \"data\": { \"id\": 1, \"title\": \"Grocery Shopping\", \"amount\": 850.0, \"categoryId\": 1, \"categoryName\": \"Food\", \"note\": \"Weekly groceries\", \"createdAt\": \"2026-03-15T12:00:00\" }\n}"
+            },
+            {
+              "name": "400 Budget Exceeded",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": false,\n  \"message\": \"This expense exceeds your category budget of ₹10000.0.\",\n  \"data\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Expense by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/{{expense_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "{{expense_id}}"
+              ]
+            },
+            "description": "Get a single expense by ID. Returns 404 if it doesn't belong to the authenticated user."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Expense fetched\",\n  \"data\": { \"id\": 1, \"title\": \"Grocery Shopping\", \"amount\": 850.0, \"categoryId\": 1, \"categoryName\": \"Food\", \"note\": \"Weekly groceries\", \"createdAt\": \"2026-03-15T12:00:00\" }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Expense",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/{{expense_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "{{expense_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Grocery Shopping (updated)\",\n  \"amount\": 920.00,\n  \"categoryId\": {{category_id}},\n  \"userId\": 1,\n  \"note\": \"Added extra items\"\n}"
+            },
+            "description": "Update an existing expense. Only the owner can update."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Expense updated successfully\",\n  \"data\": { \"id\": 1, \"title\": \"Grocery Shopping (updated)\", \"amount\": 920.0, \"categoryId\": 1, \"categoryName\": \"Food\", \"note\": \"Added extra items\", \"createdAt\": \"2026-03-15T12:00:00\" }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Expense",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/{{expense_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "{{expense_id}}"
+              ]
+            },
+            "description": "Permanently delete an expense. Only the owner can delete."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Expense deleted successfully\",\n  \"data\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Search Expenses",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/search?keyword=grocery",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "grocery",
+                  "description": "Title search keyword"
+                }
+              ]
+            },
+            "description": "Full-text search on expense title for the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Filter by Category",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/filter/category?categoryId={{category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "filter",
+                "category"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{category_id}}"
+                }
+              ]
+            },
+            "description": "Returns all expenses in the given category for the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Filter by Amount Range",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/filter/amount?minAmount=100&maxAmount=1000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "filter",
+                "amount"
+              ],
+              "query": [
+                {
+                  "key": "minAmount",
+                  "value": "100"
+                },
+                {
+                  "key": "maxAmount",
+                  "value": "1000"
+                }
+              ]
+            },
+            "description": "Returns expenses within the given amount range for the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Filter by Date Range",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/filter/date-range?startDate=2026-03-01T00:00:00&endDate=2026-03-31T23:59:59",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "filter",
+                "date-range"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-03-01T00:00:00",
+                  "description": "ISO LocalDateTime"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-03-31T23:59:59",
+                  "description": "ISO LocalDateTime"
+                }
+              ]
+            },
+            "description": "Returns expenses within the given date-time range for the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Advanced Filter (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/expenses/filter?page=0&size=10&sortBy=createdAt",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "expenses",
+                "filter"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": null,\n  \"minAmount\": 100,\n  \"maxAmount\": 5000,\n  \"startDate\": \"2026-03-01T00:00:00\",\n  \"endDate\": \"2026-03-31T23:59:59\",\n  \"searchTitle\": \"grocery\",\n  \"year\": null,\n  \"month\": null,\n  \"tagIds\": null\n}"
+            },
+            "description": "Multi-criteria paginated filter. All body fields are optional."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Categories — Admin",
+      "description": "Manage global (system-wide) categories. Requires ADMIN or SUPER_ADMIN role.",
+      "item": [
+        {
+          "name": "Create Global Category",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('test_cat_name', 'Transport_' + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('category_id', json.data.id);",
+                  "    console.log('category_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/categories",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{test_cat_name}}\",\n  \"description\": \"Transport and travel expenses\",\n  \"isGlobal\": true\n}"
+            },
+            "description": "Creates a global category visible to all users. Requires ADMIN role. Pre-request generates unique name; test script auto-saves category_id."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Global category created successfully\",\n  \"data\": { \"id\": 5, \"name\": \"Transport\", \"description\": \"Transport and travel expenses\", \"isGlobal\": true, \"userId\": null }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Global Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/categories/{{category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories",
+                "{{category_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{test_cat_name}}_upd\",\n  \"description\": \"Updated description\",\n  \"isGlobal\": true\n}"
+            },
+            "description": "Update a global category by ID. Requires ADMIN role. Uses the timestamp name generated by Create to avoid name conflicts."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Global Category",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/categories/{{category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "categories",
+                "{{category_id}}"
+              ]
+            },
+            "description": "Delete a global category by ID. Requires ADMIN role."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Categories — User",
+      "description": "Manage user-specific categories. Requires SUPER_ADMIN role.",
+      "item": [
+        {
+          "name": "Get My Categories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories"
+              ]
+            },
+            "description": "Returns all categories available to the authenticated user (global + own user-specific)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Categories fetched successfully\",\n  \"data\": [\n    { \"id\": 1, \"name\": \"Food\", \"description\": \"Food expenses\", \"isGlobal\": true, \"userId\": null },\n    { \"id\": 5, \"name\": \"My Hobbies\", \"description\": \"Personal hobby spending\", \"isGlobal\": false, \"userId\": 1 }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create User Category",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('user_cat_name', 'MyHobby_' + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('user_category_id', json.data.id);",
+                  "    console.log('user_category_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{user_cat_name}}\",\n  \"description\": \"Personal hobby spending\",\n  \"isGlobal\": false\n}"
+            },
+            "description": "Create a user-specific category. Requires SUPER_ADMIN role. Pre-request generates unique name; test script auto-saves user_category_id."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{user_category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories",
+                "{{user_category_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Hobbies (updated)\",\n  \"description\": \"Updated description\",\n  \"isGlobal\": false\n}"
+            },
+            "description": "Update a user-specific category. Requires SUPER_ADMIN role. Uses user_category_id auto-saved by Create User Category."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User Category",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/categories/{{user_category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories",
+                "{{user_category_id}}"
+              ]
+            },
+            "description": "Delete a user-specific category. Requires SUPER_ADMIN role. Uses user_category_id auto-saved by Create User Category."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Budgets",
+      "description": "Create and manage spending budgets per category or overall. All require authentication.",
+      "item": [
+        {
+          "name": "Create Budget",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('budget_id', json.data.id);",
+                  "    console.log('budget_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/budgets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "budgets"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": null,\n  \"amount\": 10000.00,\n  \"period\": \"MONTHLY\",\n  \"startDate\": \"2026-03-01\",\n  \"endDate\": null,\n  \"alertThreshold\": 0.80\n}"
+            },
+            "description": "Create a new overall budget (no category). `categoryId` is optional — null creates an overall spending budget. `period`: DAILY | WEEKLY | MONTHLY | YEARLY. `alertThreshold`: fraction (0.0–1.0) at which a BUDGET_ALERT notification fires. Test script auto-saves budget_id."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"categoryId\": 1,\n    \"categoryName\": \"Food\",\n    \"amount\": 10000.0,\n    \"period\": \"MONTHLY\",\n    \"startDate\": \"2026-03-01\",\n    \"endDate\": null,\n    \"alertThreshold\": 0.80,\n    \"isActive\": true,\n    \"spent\": 0.0,\n    \"remaining\": 10000.0,\n    \"percentUsed\": 0.0,\n    \"createdAt\": \"2026-03-15T10:00:00\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Budgets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/budgets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "budgets"
+              ]
+            },
+            "description": "Returns all active, non-deleted budgets for the authenticated user with real-time spent/remaining amounts."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Budget Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/budgets/{{budget_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "budgets",
+                "{{budget_id}}",
+                "status"
+              ]
+            },
+            "description": "Returns real-time budget utilisation for a single budget: spent, remaining, percentUsed, isOverBudget, isNearLimit."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget status fetched successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"categoryId\": 1,\n    \"categoryName\": \"Food\",\n    \"limit\": 10000.0,\n    \"spent\": 6500.0,\n    \"remaining\": 3500.0,\n    \"percentUsed\": 65.0,\n    \"isOverBudget\": false,\n    \"isNearLimit\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Budget",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/budgets/{{budget_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "budgets",
+                "{{budget_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 12000.00,\n  \"alertThreshold\": 0.75,\n  \"endDate\": \"2026-12-31\",\n  \"isActive\": true\n}"
+            },
+            "description": "Partially update a budget. All fields are optional — only provided fields are changed."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Budget",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/budgets/{{budget_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "budgets",
+                "{{budget_id}}"
+              ]
+            },
+            "description": "Soft-delete a budget (sets deletedAt timestamp). Audit logged."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Recurring Expenses",
+      "description": "Schedule expenses that auto-repeat on a frequency. Processed daily at 00:05. All require authentication.",
+      "item": [
+        {
+          "name": "Create Recurring Expense",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Fetch first available category to use a valid categoryId",
+                  "pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('base_url') + '/api/v1/categories',",
+                  "    method: 'GET',",
+                  "    header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('token') }",
+                  "}, function(err, res) {",
+                  "    if (!err) {",
+                  "        var json = res.json();",
+                  "        if (json.data && json.data.length > 0) {",
+                  "            pm.collectionVariables.set('recurring_category_id', json.data[0].id);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('recurring_id', json.data.id);",
+                  "    console.log('recurring_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/recurring-expenses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recurring-expenses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Netflix Subscription\",\n  \"amount\": 649.00,\n  \"categoryId\": {{recurring_category_id}},\n  \"frequency\": \"MONTHLY\",\n  \"startDate\": \"2026-03-16\",\n  \"endDate\": null,\n  \"note\": \"Streaming subscription\"\n}"
+            },
+            "description": "Create a recurring expense. Pre-request fetches first available category. `frequency`: DAILY | WEEKLY | MONTHLY | YEARLY. `startDate` is the first `nextDueDate`. Test script auto-saves recurring_id."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expense created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"title\": \"Netflix Subscription\",\n    \"amount\": 649.0,\n    \"categoryId\": 1,\n    \"categoryName\": \"Entertainment\",\n    \"frequency\": \"MONTHLY\",\n    \"nextDueDate\": \"2026-03-16\",\n    \"endDate\": null,\n    \"isActive\": true,\n    \"note\": \"Streaming subscription\",\n    \"createdAt\": \"2026-03-15T10:00:00\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Recurring Expenses",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/recurring-expenses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recurring-expenses"
+              ]
+            },
+            "description": "Returns all active, non-deleted recurring expenses for the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recurring Expense by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/recurring-expenses/{{recurring_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recurring-expenses",
+                "{{recurring_id}}"
+              ]
+            },
+            "description": "Get a single recurring expense by ID. Returns 404 if not owned by the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recurring Expense",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/recurring-expenses/{{recurring_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recurring-expenses",
+                "{{recurring_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Netflix (4K)\",\n  \"amount\": 799.00,\n  \"categoryId\": null,\n  \"frequency\": null,\n  \"nextDueDate\": null,\n  \"endDate\": \"2026-12-31\",\n  \"isActive\": true,\n  \"note\": \"Upgraded to 4K plan\"\n}"
+            },
+            "description": "Partially update a recurring expense. All fields are optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Recurring Expense",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/recurring-expenses/{{recurring_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recurring-expenses",
+                "{{recurring_id}}"
+              ]
+            },
+            "description": "Soft-delete a recurring expense. Audit logged."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "description": "Expense aggregation reports. Requires SUPER_ADMIN role.",
+      "item": [
+        {
+          "name": "Summary Report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "summary"
+              ]
+            },
+            "description": "Returns total expense amount and record count for the authenticated user (all time)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Summary fetched\",\n  \"data\": { \"totalExpenses\": 45800.0, \"totalRecords\": 38 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Category-Wise Report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/category-wise",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "category-wise"
+              ]
+            },
+            "description": "Returns total spending grouped by category for the authenticated user."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Category-wise report fetched\",\n  \"data\": [\n    { \"categoryId\": 1, \"categoryName\": \"Food\", \"totalAmount\": 18500.0 },\n    { \"categoryId\": 2, \"categoryName\": \"Utilities\", \"totalAmount\": 12000.0 }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Date-Wise Report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/date-wise",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "date-wise"
+              ]
+            },
+            "description": "Returns daily expense totals for the authenticated user."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Date-wise report fetched\",\n  \"data\": [\n    { \"date\": \"2026-03-15\", \"totalAmount\": 1500.0 },\n    { \"date\": \"2026-03-14\", \"totalAmount\": 3200.0 }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Custom Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/custom",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "custom"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startDate\": \"2026-03-01T00:00:00\",\n  \"endDate\": \"2026-03-31T23:59:59\",\n  \"categoryIds\": null,\n  \"minAmount\": null,\n  \"maxAmount\": null\n}"
+            },
+            "description": "Returns filtered expenses matching the given criteria. All body fields are optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Monthly Trend Report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/trends?months=6",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "trends"
+              ],
+              "query": [
+                {
+                  "key": "months",
+                  "value": "6",
+                  "description": "Number of past months to include (1–24, default 6)"
+                }
+              ]
+            },
+            "description": "Returns month-over-month spending totals for the last N calendar months. Each month includes totalAmount, expenseCount, and a category breakdown with percentages. Months with zero spending are included with 0 values. Requires SUPER_ADMIN role."
+          },
+          "response": [
+            {
+              "name": "200 OK — 6-Month Trend",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Monthly trend report fetched\",\n  \"data\": [\n    {\n      \"year\": 2025,\n      \"month\": 10,\n      \"monthLabel\": \"October 2025\",\n      \"totalAmount\": 8200.0,\n      \"expenseCount\": 9,\n      \"categoryBreakdown\": [\n        { \"categoryId\": 1, \"categoryName\": \"Food\", \"totalAmount\": 4500.0, \"percentage\": 54.9 },\n        { \"categoryId\": 2, \"categoryName\": \"Utilities\", \"totalAmount\": 3700.0, \"percentage\": 45.1 }\n      ]\n    },\n    {\n      \"year\": 2025,\n      \"month\": 11,\n      \"monthLabel\": \"November 2025\",\n      \"totalAmount\": 0.0,\n      \"expenseCount\": 0,\n      \"categoryBreakdown\": []\n    },\n    {\n      \"year\": 2026,\n      \"month\": 3,\n      \"monthLabel\": \"March 2026\",\n      \"totalAmount\": 12500.0,\n      \"expenseCount\": 14,\n      \"categoryBreakdown\": [\n        { \"categoryId\": 1, \"categoryName\": \"Food\", \"totalAmount\": 6500.0, \"percentage\": 52.0 },\n        { \"categoryId\": 2, \"categoryName\": \"Utilities\", \"totalAmount\": 6000.0, \"percentage\": 48.0 }\n      ]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Budget Performance Report",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/budget-performance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "budget-performance"
+              ]
+            },
+            "description": "Returns real-time budget vs actual spending for every active budget. Each entry has: limit, spent, remaining, percentUsed, isOverBudget, isNearLimit, and a status string (ON_TRACK | NEAR_LIMIT | EXCEEDED). Requires SUPER_ADMIN role."
+          },
+          "response": [
+            {
+              "name": "200 OK — Budget Performance",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Budget performance report fetched\",\n  \"data\": [\n    {\n      \"budgetId\": 1,\n      \"categoryId\": 1,\n      \"categoryName\": \"Food\",\n      \"period\": \"MONTHLY\",\n      \"budgetLimit\": 10000.0,\n      \"spent\": 8500.0,\n      \"remaining\": 1500.0,\n      \"percentUsed\": 85.0,\n      \"isOverBudget\": false,\n      \"isNearLimit\": true,\n      \"status\": \"NEAR_LIMIT\"\n    },\n    {\n      \"budgetId\": 2,\n      \"categoryId\": null,\n      \"categoryName\": null,\n      \"period\": \"MONTHLY\",\n      \"budgetLimit\": 30000.0,\n      \"spent\": 12500.0,\n      \"remaining\": 17500.0,\n      \"percentUsed\": 41.67,\n      \"isOverBudget\": false,\n      \"isNearLimit\": false,\n      \"status\": \"ON_TRACK\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Spending Insights",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/insights",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "insights"
+              ]
+            },
+            "description": "Returns a spending insight snapshot: month-over-month change, spending velocity (INCREASING/DECREASING/STABLE), average daily spend (last 30 days), highest spend day, biggest single expense, and most-used category."
+          },
+          "response": []
+        },
+        {
+          "name": "Top Expenses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/top-expenses?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "top-expenses"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of top expenses to return (1-100, default 10)"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "",
+                  "description": "Optional: filter by category ID",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Returns the top N expenses sorted by amount descending. Optional categoryId filter. limit is capped between 1 and 100."
+          },
+          "response": []
+        },
+        {
+          "name": "Export CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/export?format=csv",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                }
+              ]
+            },
+            "description": "Download all expenses as a CSV file. Response is a file attachment (text/csv)."
+          },
+          "response": []
+        },
+        {
+          "name": "Export PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/export?format=pdf",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "pdf"
+                }
+              ]
+            },
+            "description": "Download all expenses as a styled PDF file. Response is a file attachment (application/pdf)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "description": "Per-user tags (labels) that can be attached to expenses. Many-to-many relationship. Requires authentication.",
+      "item": [
+        {
+          "name": "Create Tag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.data && body.data.id) {",
+                  "    pm.collectionVariables.set('tag_id', body.data.id);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Work Trip\",\n  \"color\": \"#6366f1\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tags",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tags"
+              ]
+            },
+            "description": "Create a new tag for the authenticated user. Name must be unique per user. Color must be a valid hex code (e.g. #6366f1). Returns 201 on success. Saves tag_id to collection variable."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Tags",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tags",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tags"
+              ]
+            },
+            "description": "Returns all tags belonging to the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tag by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tags/{{tag_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tags",
+                "{{tag_id}}"
+              ]
+            },
+            "description": "Returns a single tag by ID. Returns 404 if the tag does not belong to the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Tag",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Reimbursable\",\n  \"color\": \"#10b981\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tags/{{tag_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tags",
+                "{{tag_id}}"
+              ]
+            },
+            "description": "Update the name and/or color of an existing tag. Returns 409 if the new name conflicts with another tag owned by the same user."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Tag",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tags/{{tag_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tags",
+                "{{tag_id}}"
+              ]
+            },
+            "description": "Delete a tag. Automatically removed from all associated expenses via CASCADE on expense_tags. Returns 404 if not found or not owned by caller."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exchange Rates",
+      "description": "Multi-currency support. Rates are fetched from open.er-api.com daily (01:00 AM) with USD as the pivot base. Use GET /convert to convert any amount between currencies.",
+      "item": [
+        {
+          "name": "Get All Exchange Rates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exchange-rates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exchange-rates"
+              ]
+            },
+            "description": "Returns all stored exchange rates. All rates use USD as the pivot base: rate = how many target units equal 1 USD. Example: { baseCurrency: 'USD', targetCurrency: 'INR', rate: 83.5 } means 1 USD = 83.5 INR."
+          },
+          "response": []
+        },
+        {
+          "name": "Convert Currency",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exchange-rates/convert?from=USD&to=INR&amount=100",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exchange-rates",
+                "convert"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "USD",
+                  "description": "Source currency ISO 4217 code (e.g. USD, EUR, GBP)"
+                },
+                {
+                  "key": "to",
+                  "value": "INR",
+                  "description": "Target currency ISO 4217 code"
+                },
+                {
+                  "key": "amount",
+                  "value": "100",
+                  "description": "Amount to convert"
+                }
+              ]
+            },
+            "description": "Convert an amount from one currency to another using stored exchange rates. Returns { fromCurrency, toCurrency, originalAmount, convertedAmount }."
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Exchange Rates (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exchange-rates/sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exchange-rates",
+                "sync"
+              ]
+            },
+            "description": "Manually trigger a full exchange rate sync from open.er-api.com. Requires ADMIN role. Normally runs automatically daily at 01:00 AM. Returns { ratesUpdated: N }."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "description": "Read-only audit trail of all entity changes.\nGET /       → ADMIN\nGET /me     → any authenticated user\nGET /user   → SUPER_ADMIN\nGET /entity → ADMIN\nGET /action → ADMIN",
+      "item": [
+        {
+          "name": "Get All Logs (ADMIN)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs?page=0&size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Returns all audit logs paginated. Requires ADMIN role."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Audit logs fetched successfully\",\n  \"data\": {\n    \"content\": [{ \"id\": 1, \"userId\": 1, \"action\": \"EXPENSE_CREATED\", \"entityType\": \"Expense\", \"entityId\": 1, \"oldValue\": null, \"newValue\": \"{\\\"id\\\":1,...}\", \"ipAddress\": \"127.0.0.1\", \"createdAt\": \"2026-03-15T12:00:00\" }],\n    \"totalElements\": 50, \"totalPages\": 3, \"number\": 0, \"size\": 20\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get My Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs/me?page=0&size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Returns audit logs for the authenticated user only. Available to any authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Logs by User (SUPER_ADMIN)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs/user/{{target_user_id}}?page=0&size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs",
+                "user",
+                "{{target_user_id}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Returns audit logs for any user by ID. Requires SUPER_ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Logs by Entity (ADMIN)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs/entity/{{entity_type}}/{{entity_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs",
+                "entity",
+                "{{entity_type}}",
+                "{{entity_id}}"
+              ]
+            },
+            "description": "Returns full change history for a specific entity. `entity_type`: Expense | Budget | RecurringExpense | Category. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Logs by Action (ADMIN)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs/action/{{audit_action}}?page=0&size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs",
+                "action",
+                "{{audit_action}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Filter audit logs by action type. `audit_action` values: EXPENSE_CREATED | EXPENSE_UPDATED | EXPENSE_DELETED | EXPENSE_AUTO_CREATED | BUDGET_CREATED | BUDGET_UPDATED | BUDGET_DELETED | RECURRING_EXPENSE_CREATED | RECURRING_EXPENSE_UPDATED | RECURRING_EXPENSE_DELETED | RECURRING_EXPENSE_PROCESSED | CATEGORY_CREATED | CATEGORY_UPDATED | CATEGORY_DELETED | USER_REGISTERED | USER_LOGIN | ROLE_ASSIGNED | NOTIFICATION_READ | NOTIFICATION_DELETED. Requires ADMIN role."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "description": "In-app notifications triggered by budget alerts, budget exceeded events, and recurring expense processing. All require authentication.",
+      "item": [
+        {
+          "name": "Get All Notifications (Paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.content && json.data.content.length > 0) {",
+                  "    pm.collectionVariables.set('notification_id', json.data.content[0].id);",
+                  "    console.log('notification_id saved:', json.data.content[0].id);",
+                  "} else {",
+                  "    console.log('No notifications found — mark-read and delete will be skipped');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications?page=0&size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Returns all notifications for the authenticated user, newest first (paginated)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Notifications fetched successfully\",\n  \"data\": {\n    \"content\": [\n      { \"id\": 1, \"title\": \"Budget Alert\", \"message\": \"You've used 80% of your category budget of ₹10000.0.\", \"type\": \"BUDGET_ALERT\", \"isRead\": false, \"entityType\": \"Budget\", \"entityId\": 1, \"createdAt\": \"2026-03-15T12:00:00\" }\n    ],\n    \"totalElements\": 3, \"totalPages\": 1, \"number\": 0, \"size\": 20\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Unread Notifications",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/unread",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread"
+              ]
+            },
+            "description": "Returns all unread notifications (not paginated). Use for badge display."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/unread/count",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread",
+                "count"
+              ]
+            },
+            "description": "Returns the integer count of unread notifications. Lightweight endpoint for badge counters."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Unread count fetched successfully\",\n  \"data\": 3\n}"
+            }
+          ]
+        },
+        {
+          "name": "Mark Notification as Read",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var notifId = pm.collectionVariables.get('notification_id');",
+                  "if (!notifId || notifId === '0') {",
+                  "    console.log('No notification_id set — skipping Mark as Read');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/{{notification_id}}/read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "{{notification_id}}",
+                "read"
+              ]
+            },
+            "description": "Mark a single notification as read. Returns 404 if it doesn't belong to the authenticated user. Audit logged as NOTIFICATION_READ. Skipped automatically if no notification_id is available."
+          },
+          "response": []
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/read-all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "read-all"
+              ]
+            },
+            "description": "Marks all unread notifications as read in one call. Returns count of updated records."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"3 notification(s) marked as read\",\n  \"data\": { \"markedRead\": 3 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Notification",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var notifId = pm.collectionVariables.get('notification_id');",
+                  "if (!notifId || notifId === '0') {",
+                  "    console.log('No notification_id set — skipping Delete Notification');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/{{notification_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "{{notification_id}}"
+              ]
+            },
+            "description": "Permanently delete a notification. Returns 404 if it doesn't belong to the authenticated user. Audit logged as NOTIFICATION_DELETED. Skipped automatically if no notification_id is available."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "description": "Single aggregated financial snapshot for the authenticated user.",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dashboard"
+              ]
+            },
+            "description": "Returns: this-month spending summary, budget overview with utilisation, last 5 expenses, upcoming recurring expenses (next 7 days), category breakdown with percentages, and unread notification count."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Dashboard fetched successfully\",\n  \"data\": {\n    \"thisMonthSummary\": { \"month\": \"March 2026\", \"totalSpent\": 12500.0, \"expenseCount\": 14 },\n    \"budgetOverview\": {\n      \"totalBudgetLimit\": 30000.0,\n      \"totalSpent\": 12500.0,\n      \"totalRemaining\": 17500.0,\n      \"overallUtilizationPercent\": 41.67,\n      \"budgets\": [{ \"id\": 1, \"categoryId\": 1, \"categoryName\": \"Food\", \"limit\": 10000.0, \"spent\": 6500.0, \"remaining\": 3500.0, \"percentUsed\": 65.0, \"isOverBudget\": false, \"isNearLimit\": false }]\n    },\n    \"recentExpenses\": [{ \"id\": 42, \"title\": \"Grocery\", \"amount\": 850.0, \"categoryId\": 1, \"categoryName\": \"Food\", \"note\": null, \"createdAt\": \"2026-03-14T18:30:00\" }],\n    \"upcomingRecurring\": [{ \"id\": 5, \"title\": \"Netflix\", \"amount\": 649.0, \"categoryId\": 7, \"categoryName\": \"Entertainment\", \"frequency\": \"MONTHLY\", \"nextDueDate\": \"2026-03-16\", \"endDate\": null, \"isActive\": true, \"note\": null, \"createdAt\": \"2026-01-16T10:00:00\" }],\n    \"categoryBreakdown\": [{ \"categoryId\": 1, \"categoryName\": \"Food\", \"totalAmount\": 6500.0, \"percentage\": 52.0 }],\n    \"unreadNotificationsCount\": 3\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

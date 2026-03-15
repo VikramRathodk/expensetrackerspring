@@ -7,8 +7,10 @@ import com.devvikram.expensetracker.expensetracker.dto.request.AssignRoleRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.AuthResponse
 import com.devvikram.expensetracker.expensetracker.dto.request.LoginRequest
 import com.devvikram.expensetracker.expensetracker.dto.request.RegisterRequest
+import com.devvikram.expensetracker.expensetracker.dto.request.UpdateBaseCurrencyRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.UserResponse
 import com.devvikram.expensetracker.expensetracker.repository.UserRepository
+import com.devvikram.expensetracker.expensetracker.security.anotation.IsAuthenticated
 import com.devvikram.expensetracker.expensetracker.security.anotation.IsSuperAdmin
 import com.devvikram.expensetracker.expensetracker.service.AuthService
 import com.devvikram.expensetracker.expensetracker.service.RoleService
@@ -21,7 +23,7 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 class AuthController(
     private val authService: AuthService,
     private val roleService: RoleService,
@@ -105,6 +107,19 @@ class AuthController(
     }
 
 
+
+    /** PUT /api/v1/auth/me/currency — update the authenticated user's base currency. */
+    @IsAuthenticated
+    @PutMapping("/me/currency")
+    fun updateBaseCurrency(
+        @Valid @RequestBody request: UpdateBaseCurrencyRequest,
+        @AuthenticationPrincipal userDetails: UserDetails
+    ): ResponseEntity<ApiResponse<UserResponse>> {
+        val user = userRepository.findByEmail(userDetails.username)
+            .orElseThrow { RuntimeException("User not found") }
+        val updated = authService.updateBaseCurrency(user.id, request.baseCurrency)
+        return ResponseEntity.ok(ApiResponse(true, "Base currency updated to ${request.baseCurrency}", updated))
+    }
 
     @GetMapping("/roles")
     fun getAllRoles(

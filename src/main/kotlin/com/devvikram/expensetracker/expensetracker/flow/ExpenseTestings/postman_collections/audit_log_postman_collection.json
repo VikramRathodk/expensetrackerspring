@@ -1,0 +1,694 @@
+{
+  "info": {
+    "name": "Expense Tracker — Audit Log API",
+    "_postman_id": "expense-tracker-audit-log-collection",
+    "description": "Complete Postman collection for all Audit Log endpoints.\n\nSetup:\n1. Import this collection.\n2. Create an environment with variables: `base_url`, `token`, `admin_token`, `super_admin_token`, `target_user_id`.\n3. Run 'Login' from the Auth folder first — the test script auto-saves the token.\n4. All audit log requests use Bearer token auth inherited from the collection.\n\nNote: Most endpoints require ADMIN or SUPER_ADMIN role.\nAuditAction values: EXPENSE_CREATED | EXPENSE_UPDATED | EXPENSE_DELETED | EXPENSE_AUTO_CREATED |\nBUDGET_CREATED | BUDGET_UPDATED | BUDGET_DELETED |\nRECURRING_EXPENSE_CREATED | RECURRING_EXPENSE_UPDATED | RECURRING_EXPENSE_DELETED | RECURRING_EXPENSE_PROCESSED |\nCATEGORY_CREATED | CATEGORY_UPDATED | CATEGORY_DELETED |\nUSER_REGISTERED | USER_LOGIN | ROLE_ASSIGNED",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "target_user_id",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth (prerequisite)",
+      "item": [
+        {
+          "name": "Login as Admin — get token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Admin token saved:', json.data.token);",
+                  "} else {",
+                  "    console.warn('Login failed — no token in response');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login as an ADMIN user and auto-save JWT token to `{{token}}`.\nMost audit log endpoints require ADMIN or SUPER_ADMIN role.\nUpdate email/password to match a seeded admin user."
+          },
+          "response": [
+            {
+              "name": "200 — Login success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"user\": {\n      \"id\": 1,\n      \"name\": \"Admin\",\n      \"email\": \"admin@example.com\",\n      \"roles\": [\"ADMIN\"]\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login as regular user — get token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('User token saved:', json.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login as a regular USER to test the /me endpoint and 403 scenarios on admin-only endpoints."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "Get All Logs — paginated (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.message).to.eql('Audit logs fetched successfully');",
+                  "});",
+                  "pm.test('Data is a paginated response', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.property('content');",
+                  "    pm.expect(data).to.have.property('totalElements');",
+                  "    pm.expect(data).to.have.property('totalPages');",
+                  "    pm.expect(data.content).to.be.an('array');",
+                  "});",
+                  "pm.test('Each log has required fields', function () {",
+                  "    var content = pm.response.json().data.content;",
+                  "    if (content.length > 0) {",
+                  "        var log = content[0];",
+                  "        pm.expect(log).to.have.property('id');",
+                  "        pm.expect(log).to.have.property('userId');",
+                  "        pm.expect(log).to.have.property('action');",
+                  "        pm.expect(log).to.have.property('entityType');",
+                  "        pm.expect(log).to.have.property('createdAt');",
+                  "    }",
+                  "});",
+                  "pm.test('Logs are ordered newest first', function () {",
+                  "    var content = pm.response.json().data.content;",
+                  "    if (content.length > 1) {",
+                  "        var first = new Date(content[0].createdAt);",
+                  "        var second = new Date(content[1].createdAt);",
+                  "        pm.expect(first.getTime()).to.be.at.least(second.getTime());",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Returns all audit logs across all users, newest first.\nPaginated — use `page` and `size` query params.\nRequires ADMIN role."
+          },
+          "response": [
+            {
+              "name": "200 — Paginated audit logs",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Audit logs fetched successfully\",\n  \"data\": {\n    \"content\": [\n      {\n        \"id\": 10,\n        \"userId\": 1,\n        \"action\": \"EXPENSE_CREATED\",\n        \"entityType\": \"Expense\",\n        \"entityId\": 5,\n        \"oldValue\": null,\n        \"newValue\": \"{\\\"id\\\":5,\\\"title\\\":\\\"Lunch\\\",\\\"amount\\\":250.0}\",\n        \"ipAddress\": \"127.0.0.1\",\n        \"createdAt\": \"2026-03-14T12:00:00\"\n      }\n    ],\n    \"totalElements\": 1,\n    \"totalPages\": 1,\n    \"size\": 20,\n    \"number\": 0\n  }\n}"
+            },
+            {
+              "name": "403 — Non-admin user",
+              "status": "Forbidden",
+              "code": 403,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Access Denied\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get All Logs — page 2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Page number is 1', function () {",
+                  "    pm.expect(pm.response.json().data.number).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs?page=1&size=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "size", "value": "10" }
+              ]
+            },
+            "description": "Fetches the second page of audit logs with page size 10."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Logs — current user (Authenticated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Message is correct', function () {",
+                  "    pm.expect(pm.response.json().message).to.eql('Your audit logs fetched successfully');",
+                  "});",
+                  "pm.test('Data is paginated', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.property('content');",
+                  "    pm.expect(data.content).to.be.an('array');",
+                  "});",
+                  "pm.test('All logs belong to the authenticated user', function () {",
+                  "    var content = pm.response.json().data.content;",
+                  "    var tokenPayload = JSON.parse(atob(pm.collectionVariables.get('token').split('.')[1]));",
+                  "    content.forEach(function (log) {",
+                  "        pm.expect(log.userId).to.be.a('number');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/me?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "me"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Returns the authenticated user's own audit trail.\nAvailable to any authenticated user — no admin role required.\nUseful for users wanting to review their own activity."
+          },
+          "response": [
+            {
+              "name": "200 — My audit logs",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Your audit logs fetched successfully\",\n  \"data\": {\n    \"content\": [\n      {\n        \"id\": 8,\n        \"userId\": 1,\n        \"action\": \"BUDGET_CREATED\",\n        \"entityType\": \"Budget\",\n        \"entityId\": 2,\n        \"oldValue\": null,\n        \"newValue\": \"{\\\"id\\\":2,\\\"amount\\\":5000.0,\\\"period\\\":\\\"MONTHLY\\\"}\",\n        \"ipAddress\": \"192.168.1.10\",\n        \"createdAt\": \"2026-03-14T11:30:00\"\n      }\n    ],\n    \"totalElements\": 1,\n    \"totalPages\": 1,\n    \"size\": 20,\n    \"number\": 0\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Logs By User ID (SUPER_ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response is paginated', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.property('content');",
+                  "    pm.expect(data).to.have.property('totalElements');",
+                  "});",
+                  "pm.test('All returned logs belong to the requested userId', function () {",
+                  "    var targetId = parseInt(pm.collectionVariables.get('target_user_id'));",
+                  "    pm.response.json().data.content.forEach(function (log) {",
+                  "        pm.expect(log.userId).to.eql(targetId);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/user/{{target_user_id}}?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "user", "{{target_user_id}}"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Returns audit trail for a specific user by ID.\nRequires SUPER_ADMIN role.\nUse `target_user_id` collection variable to set the target."
+          },
+          "response": [
+            {
+              "name": "200 — User audit logs",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Audit logs for user 1 fetched successfully\",\n  \"data\": {\n    \"content\": [\n      {\n        \"id\": 3,\n        \"userId\": 1,\n        \"action\": \"USER_LOGIN\",\n        \"entityType\": \"User\",\n        \"entityId\": 1,\n        \"oldValue\": null,\n        \"newValue\": null,\n        \"ipAddress\": \"127.0.0.1\",\n        \"createdAt\": \"2026-03-14T09:00:00\"\n      }\n    ],\n    \"totalElements\": 1,\n    \"totalPages\": 1,\n    \"size\": 20,\n    \"number\": 0\n  }\n}"
+            },
+            {
+              "name": "403 — ADMIN (not SUPER_ADMIN) denied",
+              "status": "Forbidden",
+              "code": 403,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Access Denied\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Entity History — Expense",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns list (not paginated)', function () {",
+                  "    pm.expect(pm.response.json().data).to.be.an('array');",
+                  "});",
+                  "pm.test('All logs refer to the same entity', function () {",
+                  "    pm.response.json().data.forEach(function (log) {",
+                  "        pm.expect(log.entityType).to.eql('Expense');",
+                  "        pm.expect(log.entityId).to.eql(1);",
+                  "    });",
+                  "});",
+                  "pm.test('Message is correct', function () {",
+                  "    pm.expect(pm.response.json().message).to.eql('Entity audit history fetched successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/entity/Expense/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "entity", "Expense", "1"]
+            },
+            "description": "Returns the full change history for Expense with id=1.\nShows EXPENSE_CREATED → EXPENSE_UPDATED → EXPENSE_DELETED sequence.\n\nentityType values: Expense | Budget | RecurringExpense | User | Category\nRequires ADMIN role."
+          },
+          "response": [
+            {
+              "name": "200 — Expense history",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Entity audit history fetched successfully\",\n  \"data\": [\n    {\n      \"id\": 15,\n      \"userId\": 1,\n      \"action\": \"EXPENSE_UPDATED\",\n      \"entityType\": \"Expense\",\n      \"entityId\": 1,\n      \"oldValue\": \"{\\\"title\\\":\\\"Lunch\\\",\\\"amount\\\":200.0}\",\n      \"newValue\": \"{\\\"title\\\":\\\"Lunch\\\",\\\"amount\\\":250.0}\",\n      \"ipAddress\": \"127.0.0.1\",\n      \"createdAt\": \"2026-03-14T13:00:00\"\n    },\n    {\n      \"id\": 10,\n      \"userId\": 1,\n      \"action\": \"EXPENSE_CREATED\",\n      \"entityType\": \"Expense\",\n      \"entityId\": 1,\n      \"oldValue\": null,\n      \"newValue\": \"{\\\"title\\\":\\\"Lunch\\\",\\\"amount\\\":200.0}\",\n      \"ipAddress\": \"127.0.0.1\",\n      \"createdAt\": \"2026-03-14T12:00:00\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 — Empty history (entity never touched)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Entity audit history fetched successfully\",\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Entity History — Budget",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('All logs are for Budget entity', function () {",
+                  "    pm.response.json().data.forEach(function (log) {",
+                  "        pm.expect(log.entityType).to.eql('Budget');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/entity/Budget/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "entity", "Budget", "1"]
+            },
+            "description": "Returns the full change history for Budget with id=1."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Entity History — RecurringExpense",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('All logs are for RecurringExpense entity', function () {",
+                  "    pm.response.json().data.forEach(function (log) {",
+                  "        pm.expect(log.entityType).to.eql('RecurringExpense');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/entity/RecurringExpense/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "entity", "RecurringExpense", "1"]
+            },
+            "description": "Returns the full change history for RecurringExpense with id=1.\nIncludes RECURRING_EXPENSE_CREATED, UPDATED, DELETED, and RECURRING_EXPENSE_PROCESSED (scheduler fires)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Logs By Action — EXPENSE_CREATED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('All logs have action EXPENSE_CREATED', function () {",
+                  "    pm.response.json().data.content.forEach(function (log) {",
+                  "        pm.expect(log.action).to.eql('EXPENSE_CREATED');",
+                  "    });",
+                  "});",
+                  "pm.test('Response is paginated', function () {",
+                  "    pm.expect(pm.response.json().data).to.have.property('totalElements');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/action/EXPENSE_CREATED?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "action", "EXPENSE_CREATED"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Returns all logs where action = EXPENSE_CREATED, newest first.\nRequires ADMIN role.\n\nAll valid action values:\nEXPENSE_CREATED | EXPENSE_UPDATED | EXPENSE_DELETED | EXPENSE_AUTO_CREATED\nBUDGET_CREATED | BUDGET_UPDATED | BUDGET_DELETED\nRECURRING_EXPENSE_CREATED | RECURRING_EXPENSE_UPDATED | RECURRING_EXPENSE_DELETED | RECURRING_EXPENSE_PROCESSED\nCATEGORY_CREATED | CATEGORY_UPDATED | CATEGORY_DELETED\nUSER_REGISTERED | USER_LOGIN | ROLE_ASSIGNED"
+          },
+          "response": [
+            {
+              "name": "200 — Logs for EXPENSE_CREATED",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Audit logs for action EXPENSE_CREATED fetched successfully\",\n  \"data\": {\n    \"content\": [\n      {\n        \"id\": 10,\n        \"userId\": 1,\n        \"action\": \"EXPENSE_CREATED\",\n        \"entityType\": \"Expense\",\n        \"entityId\": 5,\n        \"oldValue\": null,\n        \"newValue\": \"{\\\"id\\\":5,\\\"title\\\":\\\"Lunch\\\",\\\"amount\\\":250.0}\",\n        \"ipAddress\": \"127.0.0.1\",\n        \"createdAt\": \"2026-03-14T12:00:00\"\n      }\n    ],\n    \"totalElements\": 1,\n    \"totalPages\": 1,\n    \"size\": 20,\n    \"number\": 0\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Logs By Action — RECURRING_EXPENSE_PROCESSED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('All logs are scheduler-triggered (ipAddress is null)', function () {",
+                  "    pm.response.json().data.content.forEach(function (log) {",
+                  "        pm.expect(log.action).to.eql('RECURRING_EXPENSE_PROCESSED');",
+                  "        pm.expect(log.ipAddress).to.be.null;",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/action/RECURRING_EXPENSE_PROCESSED?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "action", "RECURRING_EXPENSE_PROCESSED"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Returns all scheduler-triggered audit logs.\nipAddress will always be null for these entries since they are created by @Scheduled, not by an HTTP request."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Logs By Action — USER_LOGIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('All logs are USER_LOGIN', function () {",
+                  "    pm.response.json().data.content.forEach(function (log) {",
+                  "        pm.expect(log.action).to.eql('USER_LOGIN');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/action/USER_LOGIN?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "action", "USER_LOGIN"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Returns all login events. Useful for detecting unusual access patterns or unauthorized login attempts."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "GET /api/audit-logs — no token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs"]
+            },
+            "description": "Sends request with no Authorization header. Expects 401 from JwtAuthenticationEntryPoint."
+          },
+          "response": [
+            {
+              "name": "401 — Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Unauthorized\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/audit-logs — USER role (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs"]
+            },
+            "description": "Use a regular USER token (not ADMIN). Expects 403 Access Denied.\nSwitch `{{token}}` to a non-admin user's token before running."
+          },
+          "response": [
+            {
+              "name": "403 — Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Access Denied\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/audit-logs/user/{userId} — ADMIN role (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/user/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "user", "1"]
+            },
+            "description": "Use an ADMIN token (not SUPER_ADMIN). Expects 403 — this endpoint requires SUPER_ADMIN role.\nSwitch `{{token}}` to an ADMIN (non-super) token before running."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/audit-logs/action/INVALID_ACTION (400/500)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 4xx or 5xx for invalid action', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(400, 599);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/audit-logs/action/NOT_A_REAL_ACTION",
+              "host": ["{{base_url}}"],
+              "path": ["api", "audit-logs", "action", "NOT_A_REAL_ACTION"]
+            },
+            "description": "Passes an invalid AuditAction enum value. Spring will return 400 Bad Request since the enum cannot be resolved."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

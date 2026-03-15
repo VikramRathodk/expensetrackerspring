@@ -14,7 +14,7 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/admin/categories")
+@RequestMapping("/api/v1/admin/categories")
 @IsAdmin
 class AdminCategoryController(
     private val categoryService: CategoryService,

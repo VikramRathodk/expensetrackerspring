@@ -1,6 +1,7 @@
 package com.devvikram.expensetracker.expensetracker.service
 
 
+import com.devvikram.expensetracker.expensetracker.enums.AuditAction
 import com.devvikram.expensetracker.expensetracker.enums.RoleType
 import com.devvikram.expensetracker.expensetracker.entity.User
 import com.devvikram.expensetracker.expensetracker.dto.request.AssignRoleRequest
@@ -22,7 +23,8 @@ class AuthService(
     private val userRepository: UserRepository,
     private val roleService: RoleService,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtUtil: JwtUtil
+    private val jwtUtil: JwtUtil,
+    private val auditLogService: AuditLogService
 ) {
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
@@ -53,6 +55,14 @@ class AuthService(
 
         val savedUser = userRepository.save(user)
 
+        auditLogService.log(
+            userId     = savedUser.id,
+            action     = AuditAction.USER_REGISTERED,
+            entityType = "User",
+            entityId   = savedUser.id,
+            newValue   = mapOf("email" to savedUser.email, "roles" to savedUser.getRoleNames())
+        )
+
         // Generate JWT token
         val token = jwtUtil.generateToken(savedUser)
 
@@ -76,6 +86,13 @@ class AuthService(
         }
 
         val token = jwtUtil.generateToken(user)
+
+        auditLogService.log(
+            userId     = user.id,
+            action     = AuditAction.USER_LOGIN,
+            entityType = "User",
+            entityId   = user.id
+        )
 
         return AuthResponse(
             token = token,
@@ -125,15 +142,39 @@ class AuthService(
         logger.info("Roles successfully updated for userId={}. New roles={}",
             updatedUser.id, updatedUser.getRoleNames())
 
+        auditLogService.log(
+            userId     = adminUserId,
+            action     = AuditAction.ROLE_ASSIGNED,
+            entityType = "User",
+            entityId   = updatedUser.id,
+            newValue   = mapOf("assignedRoles" to updatedUser.getRoleNames())
+        )
+
         return updatedUser.toUserResponse()
     }
 
+    @Transactional
+    fun updateBaseCurrency(userId: Long, newCurrency: String): UserResponse {
+        val user = userRepository.findById(userId)
+            .orElseThrow { NoSuchElementException("User not found") }
+        val updated = userRepository.save(user.copy(baseCurrency = newCurrency.uppercase()))
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.USER_CURRENCY_UPDATED,
+            entityType = "User",
+            entityId   = userId,
+            newValue   = mapOf("baseCurrency" to newCurrency.uppercase())
+        )
+        return updated.toUserResponse()
+    }
+
     private fun User.toUserResponse() = UserResponse(
-        id = id,
-        name = name,
-        email = email,
-        roles = getRoleNames(),
-        isActive = isActive,
-        createdAt = createdAt.format(DateTimeFormatter.ISO_DATE_TIME)
+        id           = id,
+        name         = name,
+        email        = email,
+        roles        = getRoleNames(),
+        isActive     = isActive,
+        createdAt    = createdAt.format(DateTimeFormatter.ISO_DATE_TIME),
+        baseCurrency = baseCurrency
     )
 }
