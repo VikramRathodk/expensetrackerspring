@@ -9,6 +9,7 @@ import com.devvikram.expensetracker.expensetracker.dto.response.ExpenseResponse
 import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseRequest
 import com.devvikram.expensetracker.expensetracker.repository.CategoryRepository
 import com.devvikram.expensetracker.expensetracker.repository.ExpenseRepository
+import com.devvikram.expensetracker.expensetracker.enums.AuditAction
 import com.devvikram.expensetracker.expensetracker.specifications.ExpenseSpecifications
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -20,7 +21,8 @@ import java.time.LocalDateTime
 class ExpenseService(
     private val expenseRepository: ExpenseRepository,
     private val categoryRepository: CategoryRepository,
-    private val budgetService: BudgetService
+    private val budgetService: BudgetService,
+    private val auditLogService: AuditLogService
 ) {
 
     fun getAllExpensesPaginated(
@@ -112,7 +114,7 @@ class ExpenseService(
         val category = categoryRepository.findById(request.categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
-        return expenseRepository.save(
+        val saved = expenseRepository.save(
             Expense(
                 title = request.title,
                 amount = request.amount,
@@ -120,7 +122,15 @@ class ExpenseService(
                 note = request.note,
                 category = category
             )
-        ).toResponse()
+        )
+        auditLogService.log(
+            userId     = saved.userId,
+            action     = AuditAction.EXPENSE_CREATED,
+            entityType = "Expense",
+            entityId   = saved.id,
+            newValue   = saved.toResponse()
+        )
+        return saved.toResponse()
     }
 
 
@@ -144,7 +154,16 @@ class ExpenseService(
             category = category,
             note = request.note
         )
-        return expenseRepository.save(updated).toResponse()
+        val saved = expenseRepository.save(updated)
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.EXPENSE_UPDATED,
+            entityType = "Expense",
+            entityId   = id,
+            oldValue   = existing.toResponse(),
+            newValue   = saved.toResponse()
+        )
+        return saved.toResponse()
     }
 
     fun deleteExpense(id: Long, userId: Long): Boolean {
@@ -152,6 +171,13 @@ class ExpenseService(
             .filter { it.userId == userId }
             .orElse(null) ?: return false
         expenseRepository.deleteById(id)
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.EXPENSE_DELETED,
+            entityType = "Expense",
+            entityId   = id,
+            oldValue   = expense.toResponse()
+        )
         return true
     }
 

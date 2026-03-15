@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(cd \"F:/spring_projects/expensetrackerspring/src/main/kotlin/com/devvikram/expensetracker/expensetracker/flow/ExpenseTestings\" && mv budget_postman_collection.json recurring_expense_postman_collection.json audit_log_postman_collection.json postman_collections/ && mv budget_test_cases.md expense_test_cases.md recurring_expense_test_cases.md audit_log_test_cases.md test_cases/)"
     ]
   }
 }

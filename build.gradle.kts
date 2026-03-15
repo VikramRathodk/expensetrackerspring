@@ -35,6 +35,10 @@ dependencies {
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	runtimeOnly("org.postgresql:postgresql")
 
+	// Flyway — database migrations
+	implementation("org.flywaydb:flyway-core")
+	implementation("org.flywaydb:flyway-database-postgresql")
+
 	// JWT
 	implementation("io.jsonwebtoken:jjwt-api:0.12.3")
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")

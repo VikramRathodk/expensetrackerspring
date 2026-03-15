@@ -1,0 +1,910 @@
+{
+  "info": {
+    "name": "Expense Tracker — Recurring Expense API",
+    "_postman_id": "expense-tracker-recurring-expense-collection",
+    "description": "Complete Postman collection for all Recurring Expense endpoints.\n\nSetup:\n1. Import this collection.\n2. Create an environment with variables: `base_url`, `token`, `recurring_id`.\n3. Run 'Login' from the Auth folder first — the test script auto-saves the token.\n4. All recurring expense requests use Bearer token auth inherited from the collection.\n\nFrequency values: DAILY | WEEKLY | MONTHLY | YEARLY",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "recurring_id",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth (prerequisite)",
+      "item": [
+        {
+          "name": "Login — get token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Token saved:', json.data.token);",
+                  "} else {",
+                  "    console.warn('Login failed — no token in response');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login and auto-save JWT token to collection variable `token`.\nUpdate email/password to match a seeded user."
+          },
+          "response": [
+            {
+              "name": "200 — Login success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"user\": {\n      \"id\": 1,\n      \"name\": \"Admin\",\n      \"email\": \"admin@example.com\",\n      \"roles\": [\"ADMIN\"]\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Recurring Expense",
+      "item": [
+        {
+          "name": "Create Recurring Expense — monthly, with endDate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.message).to.eql('Recurring expense created successfully');",
+                  "});",
+                  "pm.test('Recurring expense has correct fields', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.title).to.eql('Netflix Subscription');",
+                  "    pm.expect(data.amount).to.eql(499.0);",
+                  "    pm.expect(data.frequency).to.eql('MONTHLY');",
+                  "    pm.expect(data.isActive).to.be.true;",
+                  "    pm.expect(data.nextDueDate).to.eql('2026-03-15');",
+                  "    pm.expect(data.endDate).to.eql('2026-12-31');",
+                  "    pm.expect(data).to.have.property('id');",
+                  "    pm.expect(data).to.have.property('categoryId');",
+                  "    pm.expect(data).to.have.property('categoryName');",
+                  "    pm.expect(data).to.have.property('createdAt');",
+                  "});",
+                  "// Save id for subsequent requests",
+                  "var id = pm.response.json().data.id;",
+                  "if (id) pm.collectionVariables.set('recurring_id', id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Netflix Subscription\",\n  \"amount\": 499.0,\n  \"categoryId\": 1,\n  \"frequency\": \"MONTHLY\",\n  \"startDate\": \"2026-03-15\",\n  \"endDate\": \"2026-12-31\",\n  \"note\": \"Monthly streaming subscription\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Creates a monthly recurring expense with a fixed end date.\n\n**frequency values:** DAILY | WEEKLY | MONTHLY | YEARLY\n**startDate:** first nextDueDate (date the scheduler will first process this entry)\n**endDate:** null = runs forever; set a date to auto-deactivate after that date\n**note:** optional free-text label"
+          },
+          "response": [
+            {
+              "name": "201 — Recurring expense created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expense created successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"title\": \"Netflix Subscription\",\n    \"amount\": 499.0,\n    \"categoryId\": 1,\n    \"categoryName\": \"Entertainment\",\n    \"frequency\": \"MONTHLY\",\n    \"nextDueDate\": \"2026-03-15\",\n    \"endDate\": \"2026-12-31\",\n    \"isActive\": true,\n    \"note\": \"Monthly streaming subscription\",\n    \"createdAt\": \"2026-03-14T10:00:00\"\n  }\n}"
+            },
+            {
+              "name": "404 — Category not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Category with id 9999 not found\"\n}"
+            },
+            {
+              "name": "401 — Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Unauthorized\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Recurring Expense — runs forever (no endDate)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('endDate is null for open-ended recurring', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.endDate).to.be.null;",
+                  "    pm.expect(data.isActive).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Gym Membership\",\n  \"amount\": 1200.0,\n  \"categoryId\": 2,\n  \"frequency\": \"MONTHLY\",\n  \"startDate\": \"2026-04-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Creates a recurring expense with no end date — it runs until manually deleted or deactivated.\n`endDate` omitted → stored as `null`."
+          },
+          "response": [
+            {
+              "name": "201 — Open-ended recurring expense",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expense created successfully\",\n  \"data\": {\n    \"id\": 2,\n    \"title\": \"Gym Membership\",\n    \"amount\": 1200.0,\n    \"categoryId\": 2,\n    \"categoryName\": \"Health\",\n    \"frequency\": \"MONTHLY\",\n    \"nextDueDate\": \"2026-04-01\",\n    \"endDate\": null,\n    \"isActive\": true,\n    \"note\": null,\n    \"createdAt\": \"2026-03-14T10:05:00\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Recurring Expense — WEEKLY frequency",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Frequency is WEEKLY', function () {",
+                  "    pm.expect(pm.response.json().data.frequency).to.eql('WEEKLY');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Grocery Run\",\n  \"amount\": 800.0,\n  \"categoryId\": 3,\n  \"frequency\": \"WEEKLY\",\n  \"startDate\": \"2026-03-17\",\n  \"note\": \"Weekly grocery shopping\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Creates a WEEKLY recurring expense. The scheduler advances nextDueDate by 7 days on each fire."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Recurring Expense — DAILY frequency",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Frequency is DAILY', function () {",
+                  "    pm.expect(pm.response.json().data.frequency).to.eql('DAILY');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Morning Coffee\",\n  \"amount\": 50.0,\n  \"categoryId\": 1,\n  \"frequency\": \"DAILY\",\n  \"startDate\": \"2026-03-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Creates a DAILY recurring expense. The scheduler advances nextDueDate by 1 day on each fire."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Recurring Expense — YEARLY frequency",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Frequency is YEARLY', function () {",
+                  "    pm.expect(pm.response.json().data.frequency).to.eql('YEARLY');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Domain Renewal\",\n  \"amount\": 1500.0,\n  \"categoryId\": 4,\n  \"frequency\": \"YEARLY\",\n  \"startDate\": \"2026-01-01\",\n  \"endDate\": \"2030-01-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Creates a YEARLY recurring expense. The scheduler advances nextDueDate by 1 year on each fire."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Recurring Expenses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Returns array', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});",
+                  "pm.test('All entries are active and not deleted', function () {",
+                  "    pm.response.json().data.forEach(function (r) {",
+                  "        pm.expect(r.isActive).to.be.true;",
+                  "    });",
+                  "});",
+                  "pm.test('Each entry has required fields', function () {",
+                  "    pm.response.json().data.forEach(function (r) {",
+                  "        pm.expect(r).to.have.property('id');",
+                  "        pm.expect(r).to.have.property('title');",
+                  "        pm.expect(r).to.have.property('amount');",
+                  "        pm.expect(r).to.have.property('frequency');",
+                  "        pm.expect(r).to.have.property('nextDueDate');",
+                  "        pm.expect(r).to.have.property('categoryId');",
+                  "        pm.expect(r).to.have.property('categoryName');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Returns all active, non-deleted recurring expenses for the authenticated user.\nInactive or soft-deleted entries are excluded.\nRepository method: `findByUserIdAndIsActiveTrueAndDeletedAtIsNull(userId)`"
+          },
+          "response": [
+            {
+              "name": "200 — List of recurring expenses",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expenses fetched successfully\",\n  \"data\": [\n    {\n      \"id\": 1,\n      \"title\": \"Netflix Subscription\",\n      \"amount\": 499.0,\n      \"categoryId\": 1,\n      \"categoryName\": \"Entertainment\",\n      \"frequency\": \"MONTHLY\",\n      \"nextDueDate\": \"2026-04-15\",\n      \"endDate\": \"2026-12-31\",\n      \"isActive\": true,\n      \"note\": \"Monthly streaming subscription\",\n      \"createdAt\": \"2026-03-14T10:00:00\"\n    },\n    {\n      \"id\": 2,\n      \"title\": \"Gym Membership\",\n      \"amount\": 1200.0,\n      \"categoryId\": 2,\n      \"categoryName\": \"Health\",\n      \"frequency\": \"MONTHLY\",\n      \"nextDueDate\": \"2026-04-01\",\n      \"endDate\": null,\n      \"isActive\": true,\n      \"note\": null,\n      \"createdAt\": \"2026-03-14T10:05:00\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 — Empty list",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expenses fetched successfully\",\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Recurring Expense By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.message).to.eql('Recurring expense fetched successfully');",
+                  "});",
+                  "pm.test('Has all required response fields', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data).to.have.property('id');",
+                  "    pm.expect(data).to.have.property('title');",
+                  "    pm.expect(data).to.have.property('amount');",
+                  "    pm.expect(data).to.have.property('categoryId');",
+                  "    pm.expect(data).to.have.property('categoryName');",
+                  "    pm.expect(data).to.have.property('frequency');",
+                  "    pm.expect(data).to.have.property('nextDueDate');",
+                  "    pm.expect(data).to.have.property('isActive');",
+                  "    pm.expect(data).to.have.property('createdAt');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Fetches a single recurring expense by ID.\nOwnership-safe: uses `findByIdAndUserIdAndDeletedAtIsNull` — only returns records belonging to the authenticated user."
+          },
+          "response": [
+            {
+              "name": "200 — Found",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expense fetched successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"title\": \"Netflix Subscription\",\n    \"amount\": 499.0,\n    \"categoryId\": 1,\n    \"categoryName\": \"Entertainment\",\n    \"frequency\": \"MONTHLY\",\n    \"nextDueDate\": \"2026-04-15\",\n    \"endDate\": \"2026-12-31\",\n    \"isActive\": true,\n    \"note\": \"Monthly streaming subscription\",\n    \"createdAt\": \"2026-03-14T10:00:00\"\n  }\n}"
+            },
+            {
+              "name": "404 — Not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Recurring expense with id 9999 not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Recurring Expense — amount only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Amount was updated', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.amount).to.eql(599.0);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    pm.expect(pm.response.json().status).to.be.true;",
+                  "    pm.expect(pm.response.json().message).to.eql('Recurring expense updated successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 599.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Partial update — all fields in `UpdateRecurringExpenseRequest` are nullable.\nOnly include the fields you want to change.\n\nUpdatable fields: `title`, `amount`, `categoryId`, `frequency`, `nextDueDate`, `endDate`, `isActive`, `note`."
+          },
+          "response": [
+            {
+              "name": "200 — Amount updated",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expense updated successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"title\": \"Netflix Subscription\",\n    \"amount\": 599.0,\n    \"categoryId\": 1,\n    \"categoryName\": \"Entertainment\",\n    \"frequency\": \"MONTHLY\",\n    \"nextDueDate\": \"2026-04-15\",\n    \"endDate\": \"2026-12-31\",\n    \"isActive\": true,\n    \"note\": \"Monthly streaming subscription\",\n    \"createdAt\": \"2026-03-14T10:00:00\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Recurring Expense — change frequency",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Frequency was updated', function () {",
+                  "    pm.expect(pm.response.json().data.frequency).to.eql('YEARLY');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"frequency\": \"YEARLY\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Changes only the recurrence frequency. All other fields are unchanged."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recurring Expense — manually override nextDueDate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('nextDueDate was overridden', function () {",
+                  "    pm.expect(pm.response.json().data.nextDueDate).to.eql('2026-05-01');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nextDueDate\": \"2026-05-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Manually overrides the next due date — useful to skip a billing cycle or fix a missed date.\nThe scheduler will use this date on the next run."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recurring Expense — deactivate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Recurring expense is now inactive', function () {",
+                  "    pm.expect(pm.response.json().data.isActive).to.be.false;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Deactivates a recurring expense. It will no longer appear in GET /api/recurring-expenses and the scheduler will skip it."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recurring Expense — reactivate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Recurring expense is active again', function () {",
+                  "    pm.expect(pm.response.json().data.isActive).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Re-activates a previously deactivated recurring expense. The scheduler will resume processing it from the current nextDueDate."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recurring Expense — set endDate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('endDate is set', function () {",
+                  "    pm.expect(pm.response.json().data.endDate).to.eql('2026-09-30');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endDate\": \"2026-09-30\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Adds or changes the expiry date. The scheduler auto-deactivates the entry once nextDueDate > endDate."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recurring Expense — full update",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('All updated fields are correct', function () {",
+                  "    var data = pm.response.json().data;",
+                  "    pm.expect(data.title).to.eql('Prime Video');",
+                  "    pm.expect(data.amount).to.eql(179.0);",
+                  "    pm.expect(data.frequency).to.eql('YEARLY');",
+                  "    pm.expect(data.note).to.eql('Annual plan');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Prime Video\",\n  \"amount\": 179.0,\n  \"categoryId\": 1,\n  \"frequency\": \"YEARLY\",\n  \"note\": \"Annual plan\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Updates multiple fields in one request. Only fields present in the body are changed; omitted fields retain their existing values."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Recurring Expense (soft delete)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response status is true', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.be.true;",
+                  "    pm.expect(json.message).to.eql('Recurring expense deleted successfully');",
+                  "    pm.expect(json.data).to.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "{{recurring_id}}"]
+            },
+            "description": "Soft-deletes the recurring expense by setting `deletedAt = now()`.\nThe record remains in the database but is excluded from all queries and the daily scheduler.\n\nAfter deletion:\n- GET /api/recurring-expenses will not return it.\n- GET /api/recurring-expenses/{id} will return 404.\n- A second DELETE on the same id will also return 404.\n- The scheduler will skip it (filtered by `deletedAt IS NULL`)."
+          },
+          "response": [
+            {
+              "name": "200 — Deleted",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": true,\n  \"message\": \"Recurring expense deleted successfully\",\n  \"data\": null\n}"
+            },
+            {
+              "name": "404 — Already deleted or not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Recurring expense with id 1 not found\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "Create Recurring Expense — invalid categoryId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test('Error message mentions category id', function () {",
+                  "    pm.expect(pm.response.json().message).to.include('9999');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test\",\n  \"amount\": 100.0,\n  \"categoryId\": 9999,\n  \"frequency\": \"MONTHLY\",\n  \"startDate\": \"2026-03-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Expects 404 with message: \"Category with id 9999 not found\"."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recurring Expense By ID — not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test('Error message mentions id', function () {",
+                  "    pm.expect(pm.response.json().message).to.include('99999');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/99999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "99999"]
+            },
+            "description": "Expects 404 for a non-existent recurring expense id."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Recurring Expense — not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/99999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "99999"]
+            },
+            "description": "Expects 404 for a non-existent recurring expense id."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Recurring Expense — not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses/99999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses", "99999"]
+            },
+            "description": "Expects 404 for a non-existent or already-deleted recurring expense id."
+          },
+          "response": []
+        },
+        {
+          "name": "Any endpoint — no token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/recurring-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "recurring-expenses"]
+            },
+            "description": "Sends request with no Authorization header. Expects 401 from JwtAuthenticationEntryPoint."
+          },
+          "response": [
+            {
+              "name": "401 — Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "body": "{\n  \"status\": false,\n  \"message\": \"Unauthorized\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

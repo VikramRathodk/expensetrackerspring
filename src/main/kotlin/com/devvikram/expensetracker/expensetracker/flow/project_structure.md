@@ -36,6 +36,7 @@ expensetrackerspring/
 │   │   │   ├── service/                   # Business logic
 │   │   │   ├── specifications/            # JPA Specifications for filtering
 │   │   │   ├── flow/                      # Documentation files (this folder)
+│   │   │   │   └── ExpenseTestings/       # Postman collections & test cases
 │   │   │   └── ExpensetrackerApplication.kt
 │   │   └── resources/
 │   │       ├── application.properties     # Base config
@@ -74,6 +75,8 @@ REST controllers — thin layer that delegates all logic to services.
 | `AdminCategoryController.kt` | `/api/admin/categories` | `POST`, `PUT /{id}`, `DELETE /{id}` — global categories (ADMIN role) |
 | `UserCategoryController.kt` | `/api/categories` | `POST`, `GET`, `PUT /{id}`, `DELETE /{id}` — per-user categories |
 | `ReportController.kt` | `/api/reports` | `GET /summary`, `GET /category-wise`, `GET /date-wise`, `POST /custom` (SUPER_ADMIN role) |
+| `BudgetController.kt` | `/api/budgets` | `POST`, `GET`, `GET /{id}/status`, `PUT /{id}`, `DELETE /{id}` |
+| `RecurringExpenseController.kt` | `/api/recurring-expenses` | `POST`, `GET`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` |
 
 ---
 
@@ -91,6 +94,8 @@ Plain data classes with no business logic, used to decouple the API surface from
 | `ExpenseFilterRequest.kt` | `searchTitle?`, `categoryId?`, `minAmount?`, `maxAmount?`, `startDate?`, `endDate?`, `year?`, `month?` |
 | `CustomReportRequest.kt` | `startDate`, `endDate`, `categoryIds`, `minAmount?`, `maxAmount?` |
 | `AssignRoleRequest.kt` | `userId`, `roles: Set<RoleType>` |
+| `BudgetRequest.kt` | `CreateBudgetRequest`: `categoryId?`, `amount`, `period`, `startDate`, `endDate?`, `alertThreshold=0.80` — `UpdateBudgetRequest`: `amount?`, `alertThreshold?`, `endDate?`, `isActive?` |
+| `RecurringExpenseRequest.kt` | `CreateRecurringExpenseRequest`: `title`, `amount`, `categoryId`, `frequency`, `startDate`, `endDate?`, `note?` — `UpdateRecurringExpenseRequest`: all fields nullable + `nextDueDate?`, `isActive?` |
 
 #### Response DTOs (`dto/response/`)
 
@@ -103,6 +108,9 @@ Plain data classes with no business logic, used to decouple the API surface from
 | `SummaryReportResponse.kt` | `totalExpenses`, `count`, `averageAmount` |
 | `CategoryWiseReportResponse.kt` | `categoryName`, `total`, `count`, `percentage` |
 | `DateWiseReportResponse.kt` | `date`, `total`, `count` |
+| `BudgetResponse.kt` | `id`, `categoryId?`, `categoryName?`, `amount`, `period`, `startDate`, `endDate?`, `alertThreshold`, `isActive`, `spent`, `remaining`, `percentUsed`, `createdAt` |
+| `BudgetStatusResponse.kt` | `id`, `categoryId?`, `categoryName?`, `limit`, `spent`, `remaining`, `percentUsed`, `isOverBudget`, `isNearLimit` |
+| `RecurringExpenseResponse.kt` | `id`, `title`, `amount`, `categoryId`, `categoryName`, `frequency`, `nextDueDate`, `endDate?`, `isActive`, `note?`, `createdAt` |
 
 ---
 
@@ -116,6 +124,8 @@ JPA-annotated classes mapped to PostgreSQL tables.
 | `Role.kt` | `roles` | `name: RoleType (enum)` — M:M → `User` |
 | `Category.kt` | `categories` | `name`, `description`, `isGlobal: Boolean`, `userId (nullable)` — global categories have `userId = null` |
 | `Expense.kt` | `expenses` | `title`, `amount (positive)`, `note`, `createdAt`, `userId` — M:1 → `Category` |
+| `Budget.kt` | `budgets` | `userId`, `categoryId? (nullable = overall)`, `amount`, `period: BudgetPeriod`, `startDate`, `endDate?`, `alertThreshold=0.80`, `isActive`, `deletedAt?`, `createdAt` — M:1 → `Category` |
+| `RecurringExpense.kt` | `recurring_expenses` | `userId`, `title`, `amount`, `frequency: RecurringFrequency`, `nextDueDate`, `endDate?`, `isActive`, `note?`, `deletedAt?`, `createdAt` — M:1 → `Category` |
 
 ---
 
@@ -124,6 +134,8 @@ JPA-annotated classes mapped to PostgreSQL tables.
 | File | Values |
 |---|---|
 | `RoleType.kt` | `USER`, `ADMIN`, `SUPER_ADMIN`, `MODERATOR`, `ACCOUNTANT`, `VIEWER` |
+| `BudgetPeriod.kt` | `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY` |
+| `RecurringFrequency.kt` | `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY` |
 
 ---
 
@@ -151,10 +163,12 @@ All interfaces extend `JpaRepository`; `ExpenseRepository` also extends `JpaSpec
 | Interface | Notable Custom Methods |
 |---|---|
 | `UserRepository` | `findByEmail()`, `existsByEmail()`, `findByEmailWithRoles()`, `findByRoleType()` |
-| `ExpenseRepository` | `findByUserId()` — filtering uses Specifications, not named queries |
+| `ExpenseRepository` | `findByUserId()`, `sumAmountByUserIdAndCategoryIdAndDateBetween()`, `sumAmountByUserIdAndDateBetween()` — filtering uses Specifications |
 | `CategoryRepository` | Queries for global categories, user-specific categories, and combined lists |
 | `RoleRepository` | `findByName()`, `existsByName()` |
 | `ReportRepository` | Custom JPQL/native queries for `summaryReport()`, `categoryWiseReport()`, `getDateWiseReport()` |
+| `BudgetRepository` | `findAllActiveBudgets(userId, today)` — filters `isActive=true`, `deletedAt=null`, `startDate<=today`, `endDate>=today OR null`; `findByIdAndUserIdAndDeletedAtIsNull()` |
+| `RecurringExpenseRepository` | `findByUserIdAndIsActiveTrueAndDeletedAtIsNull()`, `findByIdAndUserIdAndDeletedAtIsNull()`, `findAllDueToday(today)` — JPQL query picks up entries where `nextDueDate <= today` and `endDate >= today OR null` |
 
 ---
 
@@ -189,11 +203,14 @@ Custom meta-annotations that combine `@PreAuthorize` with a role check, keeping 
 | File | Key Responsibilities |
 |---|---|
 | `AuthService.kt` | `register()` (hashes password, assigns default role), `login()` (validates credentials, issues JWT), `assignRoles()` (SUPER_ADMIN only) |
-| `ExpenseService.kt` | CRUD for expenses; uses `ExpenseSpecifications` to compose dynamic filter queries; pagination via `Pageable` |
+| `ExpenseService.kt` | CRUD for expenses; runs `checkBudgetOnExpense()` before every create; uses `ExpenseSpecifications` for dynamic filter queries; pagination via `Pageable` |
 | `CategoryService.kt` | Manages both global (admin-controlled) and user-specific categories; prevents duplicate names within the same scope |
 | `RoleService.kt` | Role lookup, creation, default role initialization |
 | `ReportService.kt` | Aggregates data via `ReportRepository`: summary totals, category breakdown, date breakdown, custom-range reports |
 | `CustomUserDetailsService.kt` | Spring Security integration — see Security section above |
+| `BudgetService.kt` | CRUD for budgets; `getBudgetStatus()` computes live `spent/remaining/percentUsed`; `checkBudgetOnExpense()` evaluates all active budgets for a user before an expense is saved — returns `BudgetCheckResult(shouldBlock, warnings)`; `resetPeriodicBudgets()` scheduler runs at `00:00` daily to advance `startDate` for elapsed periods |
+| `BudgetCheckResult.kt` | Simple data holder: `shouldBlock: Boolean`, `warnings: List<String>` — returned by `BudgetService.checkBudgetOnExpense()` |
+| `RecurringExpenseService.kt` | CRUD for recurring expenses; `processRecurringExpenses()` scheduler runs at `00:05` daily — finds all entries due today, auto-creates an `Expense` via `ExpenseService` (triggering budget checks), then advances `nextDueDate` and auto-deactivates entries past their `endDate`; failures are isolated per entry |
 
 ---
 
@@ -277,6 +294,9 @@ Controller                       ← parses request DTO, calls service
      │
      ▼
 Service                          ← business logic, validation, orchestration
+     │         │
+     │         └── BudgetService.checkBudgetOnExpense()   ← called by ExpenseService
+     │               on every expense create (block or warn)
      │
      ▼
 Repository / Specifications      ← database queries (JPA + dynamic specs)
@@ -286,6 +306,17 @@ PostgreSQL
      │
      ▼
 Response DTO → ApiResponse<T>    ← wrapped in generic envelope, returned as JSON
+
+─────────────────────────────────────────────────────────────────
+Scheduled Jobs (Spring @Scheduled)
+─────────────────────────────────────────────────────────────────
+00:00 daily  →  BudgetService.resetPeriodicBudgets()
+                  Advances startDate for budgets whose period window has elapsed
+
+00:05 daily  →  RecurringExpenseService.processRecurringExpenses()
+                  Finds all due recurring entries → creates Expense via ExpenseService
+                  (budget check included) → advances nextDueDate → auto-deactivates
+                  entries past endDate; each entry processed independently
 ```
 
 ---
@@ -301,3 +332,29 @@ Response DTO → ApiResponse<T>    ← wrapped in generic envelope, returned as 
 | Custom security annotations | Reduces boilerplate; centralises role logic away from controller methods |
 | `ddl-auto=validate` in prod | Prevents accidental schema changes; migrations handled manually or via Flyway |
 | Multi-stage Docker build | Keeps the final image small (JRE only); build tools not shipped to production |
+| Budget check before expense save | `ExpenseService` calls `BudgetService.checkBudgetOnExpense()` before persisting any expense — both category-scoped and overall budgets are evaluated; result carries `shouldBlock` + user-facing `warnings` |
+| Soft delete on budgets & recurring expenses | `deletedAt` timestamp instead of hard delete — preserves audit trail; all queries filter `deletedAt IS NULL` |
+| `BudgetCheckResult` data holder | Decouples the blocking/warning decision from the caller — `ExpenseService` decides what to do with `shouldBlock` and `warnings` |
+| Recurring expense scheduler at 00:05 | Fires 5 minutes after the budget reset scheduler (00:00) to ensure period windows are current before auto-expenses are created |
+| Per-entry failure isolation in scheduler | Each recurring expense is processed in its own try/catch — one bad entry (e.g. deleted category) cannot block other users' auto-expenses |
+| `nextDueDate` as the scheduler trigger | Simple `nextDueDate <= today` query; the scheduler advances this field after each fire — no cron expression needed per entry |
+
+---
+
+## flow/ExpenseTestings — Documentation & Testing Artifacts
+
+| File | Purpose |
+|---|---|
+| `expense_test_cases.md` | Test cases for `ExpenseController` and `ExpenseService` |
+| `budget_postman_collection.json` | Importable Postman collection for all `/api/budgets` endpoints |
+| `budget_test_cases.md` | Test cases for `BudgetController`, `BudgetService`, `BudgetRepository`, scheduler reset, and budget check on expense |
+| `recurring_expense_postman_collection.json` | Importable Postman collection for all `/api/recurring-expenses` endpoints |
+| `recurring_expense_test_cases.md` | Test cases for `RecurringExpenseController`, `RecurringExpenseService`, `RecurringExpenseRepository`, and the daily scheduler |
+| `audit_log_postman_collection.json` | Importable Postman collection for all `/api/audit-logs` endpoints |
+| `audit_log_test_cases.md` | Test cases for `AuditLogController`, `AuditLogService`, `AuditLogRepository`, and audit integration across all services |
+
+**Postman setup (all collections):**
+1. Import the `.json` file into Postman.
+2. Create an environment with `base_url = http://localhost:8081`, `token = ""`, and the relevant id variable (e.g. `budget_id`, `recurring_id`).
+3. Run **Login** first — the test script auto-saves the JWT to `{{token}}`.
+4. All other requests inherit Bearer auth from the collection root.

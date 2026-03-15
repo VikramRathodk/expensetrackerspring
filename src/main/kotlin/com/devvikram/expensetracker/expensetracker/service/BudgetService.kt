@@ -5,6 +5,7 @@ import com.devvikram.expensetracker.expensetracker.dto.request.UpdateBudgetReque
 import com.devvikram.expensetracker.expensetracker.dto.response.BudgetResponse
 import com.devvikram.expensetracker.expensetracker.dto.response.BudgetStatusResponse
 import com.devvikram.expensetracker.expensetracker.entity.Budget
+import com.devvikram.expensetracker.expensetracker.enums.AuditAction
 import com.devvikram.expensetracker.expensetracker.enums.BudgetPeriod
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
 import com.devvikram.expensetracker.expensetracker.repository.BudgetRepository
@@ -20,7 +21,8 @@ import java.time.LocalDateTime
 class BudgetService(
     private val budgetRepository: BudgetRepository,
     private val expenseRepository: ExpenseRepository,
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val auditLogService: AuditLogService
 ) {
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -42,7 +44,15 @@ class BudgetService(
             endDate = request.endDate,
             alertThreshold = request.alertThreshold
         )
-        return toResponse(budgetRepository.save(budget), userId)
+        val saved = budgetRepository.save(budget)
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.BUDGET_CREATED,
+            entityType = "Budget",
+            entityId   = saved.id,
+            newValue   = toResponse(saved, userId)
+        )
+        return toResponse(saved, userId)
     }
 
     // ── Read ──────────────────────────────────────────────────────────────────
@@ -86,7 +96,16 @@ class BudgetService(
             endDate = request.endDate ?: budget.endDate,
             isActive = request.isActive ?: budget.isActive
         )
-        return toResponse(budgetRepository.save(updated), userId)
+        val saved = budgetRepository.save(updated)
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.BUDGET_UPDATED,
+            entityType = "Budget",
+            entityId   = budgetId,
+            oldValue   = toResponse(budget, userId),
+            newValue   = toResponse(saved, userId)
+        )
+        return toResponse(saved, userId)
     }
 
     // ── Delete (soft) ─────────────────────────────────────────────────────────
@@ -97,6 +116,13 @@ class BudgetService(
             ?: throw ResourceNotFoundException("Budget with id $budgetId not found")
 
         budgetRepository.save(budget.copy(deletedAt = LocalDateTime.now()))
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.BUDGET_DELETED,
+            entityType = "Budget",
+            entityId   = budgetId,
+            oldValue   = toResponse(budget, userId)
+        )
     }
 
     // ── Budget check (called from ExpenseService) ─────────────────────────────
