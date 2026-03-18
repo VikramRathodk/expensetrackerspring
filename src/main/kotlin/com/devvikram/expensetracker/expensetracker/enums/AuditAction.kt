@@ -43,5 +43,9 @@ enum class AuditAction {
 
     // ── Currency ──────────────────────────────────────────────────────────────
     EXCHANGE_RATE_SYNCED,
-    USER_CURRENCY_UPDATED
+    USER_CURRENCY_UPDATED,
+
+    // ── Receipts / Attachments ────────────────────────────────────────────────
+    RECEIPT_UPLOADED,
+    RECEIPT_DELETED
 }

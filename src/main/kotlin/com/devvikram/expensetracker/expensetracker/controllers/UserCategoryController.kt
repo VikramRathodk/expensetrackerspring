@@ -1,10 +1,10 @@
 package com.devvikram.expensetracker.expensetracker.controllers
 
+import com.devvikram.expensetracker.expensetracker.dto.request.CategoryRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.ApiResponse
 import com.devvikram.expensetracker.expensetracker.entity.Category
 import com.devvikram.expensetracker.expensetracker.repository.UserRepository
 import com.devvikram.expensetracker.expensetracker.security.anotation.IsAuthenticated
-import com.devvikram.expensetracker.expensetracker.security.anotation.IsSuperAdmin
 import com.devvikram.expensetracker.expensetracker.service.CategoryService
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/v1/categories")
-@IsSuperAdmin
+@IsAuthenticated
 class UserCategoryController(
     private val categoryService: CategoryService,
     private val userRepository: UserRepository
@@ -24,39 +24,35 @@ class UserCategoryController(
 
     private val logger = LoggerFactory.getLogger(this::class.java)
 
+    private fun getUserId(userDetails: UserDetails): Long =
+        userRepository.findByEmail(userDetails.username)
+            .orElseThrow { RuntimeException("User not found") }
+            .id
+
+    /* ================= GET ================= */
+    @GetMapping
+    fun getCategories(
+        @AuthenticationPrincipal userDetails: UserDetails
+    ): ResponseEntity<ApiResponse<List<Category>>> {
+        logger.info("Get categories called by username={}", userDetails.username)
+        val userId = getUserId(userDetails)
+        val categories = categoryService.getCategoriesForUser(userId)
+        logger.info("Categories fetched. userId={} count={}", userId, categories.size)
+        return ResponseEntity.ok(ApiResponse(true, "Categories fetched successfully", categories))
+    }
+
     /* ================= CREATE ================= */
     @PostMapping
     fun createCategory(
-        @Valid @RequestBody category: Category,
+        @Valid @RequestBody request: CategoryRequest,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<Category>> {
-
-        logger.info(
-            "Create user category API called by username={} categoryName={}",
-            userDetails.username, category.name
-        )
-
-        val user = userRepository.findByEmail(userDetails.username)
-            .orElseThrow {
-                logger.error("User not found in DB for username={}", userDetails.username)
-                RuntimeException("User not found")
-            }
-
-        logger.info("User verified. userId={}", user.id)
-
-        val saved = categoryService.addUserCategory(category, user.id)
-
-        logger.info(
-            "User category created successfully. categoryId={} by userId={}",
-            saved.id, user.id
-        )
-
+        logger.info("Create user category called by username={} name={}", userDetails.username, request.name)
+        val userId = getUserId(userDetails)
+        val saved = categoryService.addUserCategory(request, userId)
+        logger.info("User category created. categoryId={} userId={}", saved.id, userId)
         return ResponseEntity.status(HttpStatus.CREATED).body(
-            ApiResponse(
-                status = true,
-                message = "Category created successfully",
-                data = saved
-            )
+            ApiResponse(true, "Category created successfully", saved)
         )
     }
 
@@ -64,72 +60,14 @@ class UserCategoryController(
     @PutMapping("/{id}")
     fun updateCategory(
         @PathVariable id: Long,
-        @Valid @RequestBody category: Category,
+        @Valid @RequestBody request: CategoryRequest,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<Category>> {
-
-        logger.info(
-            "Update user category API called by username={} categoryId={}",
-            userDetails.username, id
-        )
-
-        val user = userRepository.findByEmail(userDetails.username)
-            .orElseThrow {
-                logger.error("User not found in DB for username={}", userDetails.username)
-                RuntimeException("User not found")
-            }
-
-        logger.info("User verified. userId={}", user.id)
-
-        val updated = categoryService.updateUserCategory(id, category, user.id)
-
-        logger.info(
-            "User category updated successfully. categoryId={} by userId={}",
-            updated.id, user.id
-        )
-
-        return ResponseEntity.ok(
-            ApiResponse(
-                status = true,
-                message = "Category updated successfully",
-                data = updated
-            )
-        )
-    }
-
-    /* ================= READ ================= */
-    @GetMapping
-    fun getCategories(
-        @AuthenticationPrincipal userDetails: UserDetails
-    ): ResponseEntity<ApiResponse<List<Category>>> {
-
-        logger.info(
-            "Get categories API called by username={}",
-            userDetails.username
-        )
-
-        val user = userRepository.findByEmail(userDetails.username)
-            .orElseThrow {
-                logger.error("User not found in DB for username={}", userDetails.username)
-                RuntimeException("User not found")
-            }
-
-        logger.info("User verified. userId={}", user.id)
-
-        val categories = categoryService.getCategoriesForUser(user.id)
-
-        logger.info(
-            "Categories fetched successfully. userId={} count={}",
-            user.id, categories.size
-        )
-
-        return ResponseEntity.ok(
-            ApiResponse(
-                status = true,
-                message = "Categories fetched successfully",
-                data = categories
-            )
-        )
+        logger.info("Update user category id={} called by username={}", id, userDetails.username)
+        val userId = getUserId(userDetails)
+        val updated = categoryService.updateUserCategory(id, request, userId)
+        logger.info("User category updated. categoryId={} userId={}", updated.id, userId)
+        return ResponseEntity.ok(ApiResponse(true, "Category updated successfully", updated))
     }
 
     /* ================= DELETE ================= */
@@ -137,33 +75,11 @@ class UserCategoryController(
     fun deleteCategory(
         @PathVariable id: Long,
         @AuthenticationPrincipal userDetails: UserDetails
-    ): ResponseEntity<ApiResponse<Unit>> {
-
-        logger.info(
-            "Delete user category API called by username={} categoryId={}",
-            userDetails.username, id
-        )
-
-        val user = userRepository.findByEmail(userDetails.username)
-            .orElseThrow {
-                logger.error("User not found in DB for username={}", userDetails.username)
-                RuntimeException("User not found")
-            }
-
-        logger.info("User verified. userId={}", user.id)
-
-        categoryService.deleteUserCategory(id, user.id)
-
-        logger.info(
-            "User category deleted successfully. categoryId={} by userId={}",
-            id, user.id
-        )
-
-        return ResponseEntity.ok(
-            ApiResponse(
-                status = true,
-                message = "Category deleted successfully"
-            )
-        )
+    ): ResponseEntity<ApiResponse<Nothing>> {
+        logger.info("Delete user category id={} called by username={}", id, userDetails.username)
+        val userId = getUserId(userDetails)
+        categoryService.deleteUserCategory(id, userId)
+        logger.info("User category deleted. categoryId={} userId={}", id, userId)
+        return ResponseEntity.ok(ApiResponse(true, "Category deleted successfully"))
     }
 }

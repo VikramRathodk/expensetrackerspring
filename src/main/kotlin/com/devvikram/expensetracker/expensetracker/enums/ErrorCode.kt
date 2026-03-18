@@ -26,6 +26,12 @@ enum class ErrorCode(val description: String) {
     AUTHENTICATION_FAILED("Authentication failed"),
     UNAUTHORIZED("Insufficient permissions"),
 
+    // ── Receipts ──────────────────────────────────────────────────────────────
+    RECEIPT_NOT_FOUND("Receipt not found"),
+    RECEIPT_INVALID_TYPE("Invalid file type. Allowed: jpg, png, pdf"),
+    RECEIPT_SIZE_EXCEEDED("File size exceeds the 5 MB limit"),
+    RECEIPT_LIMIT_EXCEEDED("Maximum number of receipts per expense reached"),
+
     // ── Server ────────────────────────────────────────────────────────────────
     INTERNAL_ERROR("An unexpected internal error occurred")
 }

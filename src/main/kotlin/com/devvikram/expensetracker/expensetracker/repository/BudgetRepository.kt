@@ -24,6 +24,8 @@ interface BudgetRepository : JpaRepository<Budget, Long> {
         userId: Long
     ): List<Budget>
 
+    fun existsByCategoryIdAndDeletedAtIsNull(categoryId: Long): Boolean
+
     // Ownership-safe single budget lookup
     fun findByIdAndUserIdAndDeletedAtIsNull(id: Long, userId: Long): Budget?
 

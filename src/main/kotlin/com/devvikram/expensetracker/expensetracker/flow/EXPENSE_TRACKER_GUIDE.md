@@ -39,7 +39,7 @@
 | **Rate Limiting** | ✅ Done | ~~High~~ | ✅ Built: bucket4j, 5 attempts/IP/min on /api/auth/login |
 | **Audit Logging** | ✅ Done | ~~High~~ | ✅ Built: audit_logs table, V6 migration, wired into all services, 5 controller endpoints |
 | **Multi-currency** | ✅ Done | ~~Medium~~ | V10–V12 migrations, ExchangeRateService (open.er-api.com, USD pivot, daily @Scheduled sync), `PUT /api/v1/auth/me/currency`, `GET /api/v1/exchange-rates/convert` |
-| **Attachments / Receipts** | ⬜ Missing | Medium | No way to attach receipt images to expenses |
+| **Attachments / Receipts** | ✅ Done | ~~Medium~~ | S3-backed; V14 migration; `POST/GET/DELETE /api/v1/expenses/{id}/receipts`; pre-signed URLs; 5 MB / jpg,png,pdf limit |
 | **Tags / Labels** | ✅ Done | ~~Medium~~ | Many-to-many with expenses, per-user, filterable — V9 migration, TagController `/api/v1/tags` |
 | **Export (CSV / PDF)** | ✅ Done | ~~Medium~~ | `GET /api/reports/export?format=csv\|pdf` — Apache Commons CSV + OpenPDF |
 | **API Versioning** | ✅ Done | ~~Medium~~ | All routes now use `/api/v1/` prefix — Postman collection updated |
@@ -183,20 +183,69 @@ INDEXES:
 
 ### Duplicate @PreAuthorize on Controllers — ✅ FIXED
 
-> **Problem:** Spring Security 7 enforces that only one `@PreAuthorize` annotation may exist on a method (including annotations inherited from the class level). `ReportController` and `UserCategoryController` both had `@IsAuthenticated` + `@IsSuperAdmin` stacked at class level, which each expand to a separate `@PreAuthorize`. This caused:
+> **Problem:** Spring Security 7 enforces that only one `@PreAuthorize` annotation may exist on a method (including annotations inherited from the class level). `ReportController` had `@IsAuthenticated` + `@IsSuperAdmin` stacked at class level, which each expand to a separate `@PreAuthorize`. This caused:
 >
 > `AnnotationConfigurationException: Please ensure there is one unique annotation of type [@PreAuthorize]`
 
-**Root cause:** Both `@IsAuthenticated` (`isAuthenticated()`) and `@IsSuperAdmin` (`hasRole('SUPER_ADMIN')`) are meta-annotated with `@PreAuthorize`. Spring Security 7 finds two competing values and throws on the first request.
-
-**Fix:** Removed the redundant `@IsAuthenticated` from both controllers. `@IsSuperAdmin` already implies authentication — a user cannot hold the SUPER_ADMIN role without being authenticated.
-
-| Controller | Before | After |
-|---|---|---|
-| `ReportController` | `@IsAuthenticated` + `@IsSuperAdmin` | `@IsSuperAdmin` only |
-| `UserCategoryController` | `@IsAuthenticated` + `@IsSuperAdmin` | `@IsSuperAdmin` only |
+**Fix:** Removed the redundant `@IsAuthenticated` from `ReportController`. `@IsSuperAdmin` already implies authentication.
 
 > **Rule going forward:** Never stack two security annotations that both resolve to `@PreAuthorize` on the same class or method. Use the most restrictive annotation only.
+
+---
+
+### Category Module Fixes — ✅ FIXED
+
+Six logic and security bugs were found and corrected in the category module:
+
+#### 1. `UserCategoryController` used `@IsSuperAdmin` instead of `@IsAuthenticated` — ✅ FIXED
+
+`/api/v1/categories` was only accessible to `SUPER_ADMIN`. Regular users could not create or view their own categories. Fixed to `@IsAuthenticated`.
+
+#### 2. `CategoryService` missing audit logging — ✅ FIXED
+
+`AuditLogService` was not injected into `CategoryService`. All create/update/delete operations now log `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_DELETED`.
+
+#### 3. No in-use check before category deletion — ✅ FIXED
+
+Deleting a category referenced by expenses, budgets, or recurring expenses would throw an unhandled `DataIntegrityViolationException`. Service now explicitly checks all three tables before deletion and throws a clean `BadRequestException("Cannot delete: category is referenced by...")`.
+
+#### 4. Entity used directly as request body — ✅ FIXED
+
+Both controllers accepted `@RequestBody category: Category` (the raw JPA entity), allowing clients to supply `isGlobal`, `userId`, and `createdAt`. Replaced with a `CategoryRequest` DTO containing only `name` and `description`.
+
+**New DTO: `dto/request/CategoryRequest.kt`**
+```kotlin
+data class CategoryRequest(
+    @field:NotBlank val name: String,
+    val description: String? = null
+)
+```
+
+#### 5. No `GET /api/v1/admin/categories` endpoint — ✅ FIXED
+
+`AdminCategoryController` had no list endpoint. Added `GET /api/v1/admin/categories` returning all global categories.
+
+#### 6. `updateGlobalCategory` / `deleteGlobalCategory` not passing `adminId` — ✅ FIXED
+
+Audit log calls for update and delete were missing the `adminId`. Updated service signatures to accept `adminId` from the controller.
+
+**Updated endpoints:**
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /api/v1/admin/categories` | ADMIN | List all global categories |
+| `POST /api/v1/admin/categories` | ADMIN | Create a global category |
+| `PUT /api/v1/admin/categories/{id}` | ADMIN | Update a global category |
+| `DELETE /api/v1/admin/categories/{id}` | ADMIN | Delete (blocked if in use) |
+| `GET /api/v1/categories` | Authenticated | List user's own + global categories |
+| `POST /api/v1/categories` | Authenticated | Create a user-specific category |
+| `PUT /api/v1/categories/{id}` | Authenticated | Update own category |
+| `DELETE /api/v1/categories/{id}` | Authenticated | Delete own category (blocked if in use) |
+
+**Repository methods added:**
+- `ExpenseRepository.existsByCategoryId(categoryId)`
+- `BudgetRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId)`
+- `RecurringExpenseRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId)`
 
 ---
 
@@ -555,13 +604,76 @@ Same-currency expenses: `amountInBase = amount` (no rate lookup needed).
 | `POST /api/v1/exchange-rates/sync` | ADMIN | Manually trigger full rate sync from open.er-api.com |
 | `PUT /api/v1/auth/me/currency` | Authenticated | Update the user's base currency preference |
 
-### 7.2 Receipt Attachments — ⬜ NOT YET BUILT
+### 7.2 Receipt Attachments — ✅ COMPLETE
 
-- Add `receipts` table: `id`, `expense_id`, `file_path`, `file_name`, `uploaded_at`
-- Store files in MinIO (self-hosted S3-compatible) or AWS S3
-- `POST /api/expenses/{id}/receipts` — multipart file upload
-- `GET /api/expenses/{id}/receipts` — list attachments with pre-signed URLs
-- Max file size: 5MB, allowed types: jpg, png, pdf
+> ✅ **Built** — `receipts` table (V14 migration), `ReceiptService`, `ReceiptController`. Files stored directly in the database as `BYTEA`. A dedicated download endpoint streams the raw bytes. Audit logged. Supports **batch upload** (multiple files per request) and a combined **create-expense-with-receipts** endpoint.
+
+**DB Table (V14/V15 migrations)**
+
+```sql
+TABLE: receipts
+  id           BIGSERIAL PK
+  expense_id   BIGINT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE
+  user_id      BIGINT NOT NULL
+  file_name    VARCHAR(255)     -- original name from client
+  file_data    BYTEA NOT NULL   -- raw file bytes stored in DB
+  file_size    BIGINT           -- bytes
+  content_type VARCHAR(100)     -- image/jpeg | image/png | application/pdf
+  uploaded_at  TIMESTAMP DEFAULT NOW()
+
+INDEXES:
+  idx_receipts_expense_id  ON receipts(expense_id)
+  idx_receipts_user_id     ON receipts(user_id)
+```
+
+**Upload rules:**
+- Allowed types: `image/jpeg`, `image/png`, `application/pdf`
+- Max file size: 5 MB per file
+- Max receipts per expense: 5 (checked against existing count before batch)
+- All files are validated **before** any are saved — fail fast, no partial writes
+
+**Completed endpoints:**
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `POST /api/v1/expenses/{id}/receipts` | Authenticated | Upload one or more receipts (multipart/form-data, field: `files`). Returns `List<ReceiptResponse>`. |
+| `POST /api/v1/expenses/with-receipt` | Authenticated | Create an expense + attach receipts in **one call** (multipart: `expense` JSON part + optional `files`). |
+| `GET /api/v1/expenses/{id}/receipts` | Authenticated | List all receipts with download URL per receipt |
+| `GET /api/v1/expenses/{id}/receipts/{receiptId}/download` | Authenticated | Stream the raw file bytes with correct Content-Type header |
+| `DELETE /api/v1/expenses/{id}/receipts/{receiptId}` | Authenticated | Delete a receipt from the DB |
+
+**Postman — how to send multiple files:**
+
+In the Body → form-data tab, use the **same key** (`files`) for each row and change the type dropdown to **File**:
+```
+Key: files  Type: File  →  select bill1.jpg
+Key: files  Type: File  →  select bill2.png
+```
+
+**Combined create + upload (`POST /api/v1/expenses/with-receipt`):**
+```
+Key: expense  Type: Text (Content-Type: application/json)
+  Value: {"title":"Lunch","amount":250,"categoryId":1,"userId":0,"currency":"INR"}
+Key: files    Type: File  →  select file(s)
+```
+
+**Files added / modified:**
+
+| File | Change |
+|---|---|
+| `entity/Receipt.kt` | New entity — `fileData: ByteArray` mapped as `BYTEA` (no `@Lob`) |
+| `repository/ReceiptRepository.kt` | `findByExpenseIdAndUserId`, `findByIdAndUserId`, `countByExpenseId` |
+| `service/ReceiptService.kt` | Saves `file.bytes` directly to DB; `downloadUrl` points to `/download` endpoint; `getReceiptForDownload()` for streaming |
+| `controllers/ReceiptController.kt` | Upload, list, download (`GET /{id}/download`), delete |
+| `service/ExpenseService.kt` | `createExpenseWithReceipt(request, List<MultipartFile>)` — creates expense then calls `ReceiptService`; `@Lazy` inject to avoid circular dep |
+| `controllers/ExpenseController.kt` | `POST /with-receipt` — multipart with `expense` JSON part + optional `files` list |
+| `dto/response/ReceiptResponse.kt` | id, expenseId, fileName, fileSize, contentType, uploadedAt, downloadUrl |
+| `enums/AuditAction.kt` | Added `RECEIPT_UPLOADED`, `RECEIPT_DELETED` |
+| `enums/ErrorCode.kt` | Added `RECEIPT_NOT_FOUND`, `RECEIPT_INVALID_TYPE`, `RECEIPT_SIZE_EXCEEDED`, `RECEIPT_LIMIT_EXCEEDED` |
+| `application.properties` | Multipart size limits (5 MB) |
+| `db/migration/V14__create_receipts.sql` | Creates receipts table with `file_data BYTEA` |
+| `db/migration/V15__receipts_use_file_data.sql` | Migration for existing DBs: drops `s3_key`, adds `file_data BYTEA` |
+| `db/migration/V16__audit_logs_add_receipt_actions.sql` | Extends `audit_logs_action_check` constraint with `RECEIPT_UPLOADED`, `RECEIPT_DELETED` |
 
 ### 7.3 Tags / Labels — ✅ COMPLETE
 
@@ -732,7 +844,7 @@ Recommended pipeline: push to main →
 | **Priority 19** | Tags / Labels (many-to-many with expenses, V9 migration, TagController, filter by tagIds) | ✅ Done |
 | **Priority 20** | Multi-currency support (V10–V12, ExchangeRateService, USD-pivot, daily sync, convert endpoint) | ✅ Done |
 | **Priority 21** | Redis caching for reports | ⬜ Not built |
-| **Priority 22** | Receipt attachments (MinIO / S3) | ⬜ Not built |
+| **Priority 22** | Receipt attachments (AWS S3) | ✅ Done |
 | **Priority 23** | OAuth2 / Google login | ⬜ Not built |
 
 ---

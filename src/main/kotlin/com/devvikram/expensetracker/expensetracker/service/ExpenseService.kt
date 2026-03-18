@@ -15,10 +15,12 @@ import com.devvikram.expensetracker.expensetracker.repository.TagRepository
 import com.devvikram.expensetracker.expensetracker.repository.UserRepository
 import com.devvikram.expensetracker.expensetracker.enums.AuditAction
 import com.devvikram.expensetracker.expensetracker.specifications.ExpenseSpecifications
+import org.springframework.context.annotation.Lazy
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
+import org.springframework.web.multipart.MultipartFile
 import java.time.LocalDateTime
 
 @Service
@@ -29,7 +31,8 @@ class ExpenseService(
     private val userRepository: UserRepository,
     private val exchangeRateService: ExchangeRateService,
     private val budgetService: BudgetService,
-    private val auditLogService: AuditLogService
+    private val auditLogService: AuditLogService,
+    @Lazy private val receiptService: ReceiptService
 ) {
 
     fun getAllExpensesPaginated(
@@ -149,6 +152,13 @@ class ExpenseService(
         return saved.toResponse()
     }
 
+    fun createExpenseWithReceipt(request: ExpenseRequest, files: List<MultipartFile>): ExpenseResponse {
+        val expense = createExpense(request)
+        if (files.isNotEmpty()) {
+            receiptService.uploadReceipt(expense.id, request.userId, files)
+        }
+        return expense
+    }
 
     fun getExpenseById(id: Long, userId: Long): ExpenseResponse? {
         return expenseRepository.findById(id)
