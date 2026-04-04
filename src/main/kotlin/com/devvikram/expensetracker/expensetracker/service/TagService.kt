@@ -8,6 +8,7 @@ import com.devvikram.expensetracker.expensetracker.exceptions.ConflictException
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
 import com.devvikram.expensetracker.expensetracker.repository.TagRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class TagService(
@@ -15,6 +16,7 @@ class TagService(
     private val auditLogService: AuditLogService
 ) {
 
+    @Transactional
     fun createTag(userId: Long, request: TagRequest): TagResponse {
         if (tagRepository.existsByNameAndUserId(request.name, userId)) {
             throw ConflictException("Tag '${request.name}' already exists")
@@ -32,13 +34,16 @@ class TagService(
         return tag.toResponse()
     }
 
+    @Transactional(readOnly = true)
     fun getTagsByUser(userId: Long): List<TagResponse> =
         tagRepository.findByUserId(userId).map { it.toResponse() }
 
+    @Transactional(readOnly = true)
     fun getTagById(id: Long, userId: Long): TagResponse =
         (tagRepository.findByIdAndUserId(id, userId)
             ?: throw ResourceNotFoundException("Tag not found")).toResponse()
 
+    @Transactional
     fun updateTag(id: Long, userId: Long, request: TagRequest): TagResponse {
         val existing = tagRepository.findByIdAndUserId(id, userId)
             ?: throw ResourceNotFoundException("Tag not found")
@@ -59,6 +64,7 @@ class TagService(
         return updated.toResponse()
     }
 
+    @Transactional
     fun deleteTag(id: Long, userId: Long) {
         val tag = tagRepository.findByIdAndUserId(id, userId)
             ?: throw ResourceNotFoundException("Tag not found")

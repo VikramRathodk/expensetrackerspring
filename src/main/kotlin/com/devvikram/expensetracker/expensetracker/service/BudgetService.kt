@@ -59,11 +59,13 @@ class BudgetService(
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     fun getAllBudgets(userId: Long): List<BudgetResponse> =
         budgetRepository
             .findByUserIdAndIsActiveTrueAndDeletedAtIsNull(userId)
             .map { toResponse(it, userId) }
 
+    @Transactional(readOnly = true)
     fun getBudgetStatus(userId: Long, budgetId: Long): BudgetStatusResponse {
         val budget = budgetRepository.findByIdAndUserIdAndDeletedAtIsNull(budgetId, userId)
             ?: throw ResourceNotFoundException("Budget with id $budgetId not found")
@@ -136,6 +138,7 @@ class BudgetService(
      *   val check = budgetService.checkBudgetOnExpense(userId, categoryId, amount)
      *   if (check.shouldBlock) throw BadRequestException(check.warnings.joinToString(". "))
      */
+    @Transactional(readOnly = true)
     fun checkBudgetOnExpense(userId: Long, categoryId: Long, expenseAmount: Double): BudgetCheckResult {
         val categoryBudgets = budgetRepository
             .findByUserIdAndCategoryIdAndIsActiveTrueAndDeletedAtIsNull(userId, categoryId)

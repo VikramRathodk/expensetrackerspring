@@ -27,6 +27,8 @@ enum class AuditAction {
     // ── Auth ──────────────────────────────────────────────────────────────────
     USER_REGISTERED,
     USER_LOGIN,
+    USER_LOGOUT,
+    TOKEN_REFRESHED,
     ROLE_ASSIGNED,
 
     // ── Notification ──────────────────────────────────────────────────────────

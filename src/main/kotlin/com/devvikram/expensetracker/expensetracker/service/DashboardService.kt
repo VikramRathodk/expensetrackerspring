@@ -9,6 +9,7 @@ import com.devvikram.expensetracker.expensetracker.specifications.ExpenseSpecifi
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -21,6 +22,7 @@ class DashboardService(
     private val notificationService: NotificationService
 ) {
 
+    @Transactional(readOnly = true)
     fun getDashboard(userId: Long): DashboardResponse {
         val today = LocalDate.now()
         val monthStart = today.withDayOfMonth(1)

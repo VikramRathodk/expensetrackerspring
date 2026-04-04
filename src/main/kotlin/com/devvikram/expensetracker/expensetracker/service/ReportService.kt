@@ -7,6 +7,7 @@ import com.devvikram.expensetracker.expensetracker.repository.ExpenseRepository
 import com.devvikram.expensetracker.expensetracker.repository.ReportRepository
 import com.devvikram.expensetracker.expensetracker.specifications.ExpenseSpecifications
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.Month
@@ -31,6 +32,7 @@ class ReportService(
     fun getDateWise(userId: Long): List<DateWiseReportResponse> =
         reportRepository.getDateWiseReport(userId)
 
+    @Transactional(readOnly = true)
     fun getCustomReport(userId: Long, request: CustomReportRequest): List<ExpenseResponse> =
         expenseRepository.findAll(
             ExpenseSpecifications.build(userId, request)
@@ -105,6 +107,7 @@ class ReportService(
 
     // ── Spending Insights ─────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     fun getInsights(userId: Long): InsightReportResponse {
         val now        = LocalDate.now()
         val thisMonthStart = now.withDayOfMonth(1).atStartOfDay()
@@ -161,6 +164,7 @@ class ReportService(
 
     // ── Top Expenses ──────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     fun getTopExpenses(userId: Long, limit: Int, categoryId: Long?): List<ExpenseResponse> {
         var spec = ExpenseSpecifications.filterByUserId(userId)
         if (categoryId != null) spec = spec.and(ExpenseSpecifications.filterByCategory(categoryId))

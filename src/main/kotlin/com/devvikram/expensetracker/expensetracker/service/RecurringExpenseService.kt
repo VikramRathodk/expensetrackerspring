@@ -63,11 +63,13 @@ class RecurringExpenseService(
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     fun getAllRecurringExpenses(userId: Long): List<RecurringExpenseResponse> =
         recurringExpenseRepository
             .findByUserIdAndIsActiveTrueAndDeletedAtIsNull(userId)
             .map { toResponse(it) }
 
+    @Transactional(readOnly = true)
     fun getRecurringExpenseById(userId: Long, id: Long): RecurringExpenseResponse {
         val recurring = recurringExpenseRepository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
             ?: throw ResourceNotFoundException("Recurring expense with id $id not found")

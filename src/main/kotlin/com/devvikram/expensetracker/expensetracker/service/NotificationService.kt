@@ -26,6 +26,7 @@ class NotificationService(
      * Creates and persists a notification. Safe to call from schedulers.
      * Failures are swallowed so they never interrupt the caller.
      */
+    @Transactional
     fun send(
         userId: Long,
         title: String,
@@ -52,6 +53,7 @@ class NotificationService(
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     fun getNotifications(userId: Long, page: Int, size: Int): Page<NotificationResponse> {
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         return notificationRepository
@@ -59,11 +61,13 @@ class NotificationService(
             .map { it.toResponse() }
     }
 
+    @Transactional(readOnly = true)
     fun getUnreadNotifications(userId: Long): List<NotificationResponse> =
         notificationRepository
             .findByUserIdAndIsReadFalseOrderByCreatedAtDesc(userId)
             .map { it.toResponse() }
 
+    @Transactional(readOnly = true)
     fun getUnreadCount(userId: Long): Long =
         notificationRepository.countByUserIdAndIsReadFalse(userId)
 

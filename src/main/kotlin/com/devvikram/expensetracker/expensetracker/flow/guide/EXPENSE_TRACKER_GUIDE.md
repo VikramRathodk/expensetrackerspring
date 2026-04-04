@@ -14,7 +14,7 @@
 >
 > Your project is a fully-featured expense **TRACKER**. Budgets, recurring expenses, in-app notifications, and a dashboard are all live. The next frontier is tests, Swagger, and trend analytics.
 >
-> Infrastructure: ✅ Solid | Core Business Features: ✅ Complete | Tests: ✅ 45 passing | Swagger: ✅ Live | Export: ✅ CSV + PDF | API Versioning: ✅ /api/v1/ | Tags: ✅ Many-to-Many | Insights: ✅ Built | Error Codes: ✅ Built | Multi-Currency: ✅ Built | Next: Redis Caching + Refresh Tokens
+> Infrastructure: ✅ Solid | Core Business Features: ✅ Complete | Tests: ✅ 45 passing | Swagger: ✅ Live | Export: ✅ CSV + PDF | API Versioning: ✅ /api/v1/ | Tags: ✅ Many-to-Many | Insights: ✅ Built | Error Codes: ✅ Built | Multi-Currency: ✅ Built | Refresh Tokens: ✅ Built | Next: Redis Caching
 
 ---
 
@@ -22,7 +22,7 @@
 
 | Feature | Status | Priority | Notes |
 |---|---|---|---|
-| **Authentication / JWT** | ✅ Built | Done | Solid implementation with HMAC-SHA256, 24hr expiry |
+| **Authentication / JWT** | ✅ Built | Done | HMAC-SHA256; 15min access token + 7-day refresh token rotation; DB-backed revocation |
 | **Role System** | ✅ Built | Done | 6 roles, custom annotations, @PreAuthorize |
 | **Expense CRUD** | ✅ Built | Done | Create, read, update, delete with ownership checks |
 | **Dynamic Filtering** | ✅ Built | Done | JPA Specifications with composable filters |
@@ -35,7 +35,7 @@
 | **Notifications / Alerts** | ✅ Built | ~~Critical~~ | ✅ Built: NotificationService, 4 types, auto-triggered by budget & recurring scheduler |
 | **Dashboard API** | ✅ Built | ~~High~~ | ✅ Built: GET /api/dashboard — monthly summary, budgets, recent, upcoming, category breakdown |
 | **Soft Deletes** | ✅ Done | ~~High~~ | ✅ Built: deleted_at on expenses, budgets, recurring expenses |
-| **Refresh Tokens** | ⬜ Deferred | High | Logout is cosmetic — tokens still work after logout |
+| **Refresh Tokens** | ✅ Built | ~~High~~ | ✅ Built: short-lived access token (15min) + long-lived refresh token (7d), DB-backed rotation, `POST /auth/refresh`, `POST /auth/logout` |
 | **Rate Limiting** | ✅ Done | ~~High~~ | ✅ Built: bucket4j, 5 attempts/IP/min on /api/auth/login |
 | **Audit Logging** | ✅ Done | ~~High~~ | ✅ Built: audit_logs table, V6 migration, wired into all services, 5 controller endpoints |
 | **Multi-currency** | ✅ Done | ~~Medium~~ | V10–V12 migrations, ExchangeRateService (open.er-api.com, USD pivot, daily @Scheduled sync), `PUT /api/v1/auth/me/currency`, `GET /api/v1/exchange-rates/convert` |
@@ -251,21 +251,59 @@ Audit log calls for update and delete were missing the `adminId`. Updated servic
 
 ## 3. Security Improvements
 
-### 3.1 Refresh Token Flow — ⬜ DEFERRED
+### 3.1 Refresh Token Flow — ✅ COMPLETE
 
-> ❌ **Current Problem**
->
-> Right now, logout is cosmetic. The JWT token remains valid for 24 hours after logout. Anyone who intercepts the token can use it until it expires — you have no way to revoke it.
+> ✅ **Built** — Short-lived access tokens (15 min) paired with long-lived refresh tokens (7 days) stored in the `refresh_tokens` DB table. Logout revokes the refresh token. Token rotation on every refresh call (old token deleted, new pair issued).
 
-**Fix: Short-Lived Access Token + Refresh Token** *(deferred for later)*
+**Implementation**
 
 | Component | Detail |
 |---|---|
-| **Access Token** | Reduce expiry to 15 minutes (not 24 hours) |
-| **Refresh Token** | Long-lived (7–30 days), stored in `refresh_tokens` DB table |
-| **On Logout** | Delete refresh token from DB + add access token to Redis blacklist |
-| **Token Refresh** | `POST /api/auth/refresh` — validates refresh token, issues new access token |
-| **JwtAuthFilter Update** | Check Redis blacklist before accepting any token |
+| **Access Token** | 15-minute expiry (`jwt.expiration=900000`) |
+| **Refresh Token** | 7-day expiry (`jwt.refresh-expiration=604800000`), UUID stored in `refresh_tokens` table |
+| **On Login / Register** | Issues both tokens; old refresh token for the user is replaced (single active session) |
+| **Token Refresh** | `POST /api/v1/auth/refresh` — public; validates refresh token in DB, rotates both tokens |
+| **On Logout** | `POST /api/v1/auth/logout` — deletes refresh token from DB; audit logged as `USER_LOGOUT` |
+| **Revocation** | DB lookup on every refresh — expired or deleted tokens are immediately rejected |
+
+**DB Table (V17__create_refresh_tokens.sql)**
+
+```sql
+TABLE: refresh_tokens
+  id          BIGSERIAL PK
+  token       VARCHAR(255) NOT NULL UNIQUE
+  user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE
+  expires_at  TIMESTAMP NOT NULL
+  revoked     BOOLEAN NOT NULL DEFAULT FALSE
+  created_at  TIMESTAMP DEFAULT NOW()
+
+INDEXES:
+  idx_refresh_tokens_token    ON refresh_tokens(token)
+  idx_refresh_tokens_user_id  ON refresh_tokens(user_id)
+```
+
+**Files added / modified:**
+
+| File | Change |
+|---|---|
+| `entity/RefreshToken.kt` | New entity — `token`, `user`, `expiresAt`, `revoked`, `createdAt` |
+| `repository/RefreshTokenRepository.kt` | `findByToken`, `deleteAllByUser`, `deleteAllByUserId` |
+| `service/RefreshTokenService.kt` | `createRefreshToken()`, `validateRefreshToken()`, `revokeByUserId()` |
+| `dto/request/RefreshTokenRequest.kt` | `@NotBlank refreshToken` field |
+| `dto/response/AuthResponse.kt` | `token` renamed to `accessToken`; `refreshToken` added |
+| `service/AuthService.kt` | `register()`/`login()` now issue both tokens; `refreshToken()` + `logout()` added |
+| `controllers/AuthController.kt` | `POST /api/v1/auth/refresh` (public) + `POST /api/v1/auth/logout` (authenticated) |
+| `security/SecurityConfig.kt` | `/api/v1/auth/refresh` added to `permitAll()` |
+| `enums/AuditAction.kt` | Added `USER_LOGOUT`, `TOKEN_REFRESHED` |
+| `application.properties` | `jwt.expiration=900000`, `jwt.refresh-expiration=604800000` |
+| `db/migration/V17__create_refresh_tokens.sql` | Creates `refresh_tokens` table |
+
+**Completed endpoints:**
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `POST /api/v1/auth/refresh` | Public | Exchange a valid refresh token for a new access + refresh token pair |
+| `POST /api/v1/auth/logout` | Authenticated | Revoke the current user's refresh token |
 
 ---
 
@@ -302,7 +340,7 @@ TABLE: audit_logs
 | Budget | `BUDGET_CREATED`, `BUDGET_UPDATED`, `BUDGET_DELETED` |
 | Recurring | `RECURRING_EXPENSE_CREATED`, `RECURRING_EXPENSE_UPDATED`, `RECURRING_EXPENSE_DELETED`, `RECURRING_EXPENSE_PROCESSED` |
 | Category | `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_DELETED` |
-| Auth | `USER_REGISTERED`, `USER_LOGIN`, `ROLE_ASSIGNED` |
+| Auth | `USER_REGISTERED`, `USER_LOGIN`, `USER_LOGOUT`, `TOKEN_REFRESHED`, `ROLE_ASSIGNED` |
 | Notification | `NOTIFICATION_READ`, `NOTIFICATION_DELETED` |
 | Reports | `REPORT_EXPORTED` |
 | Tags | `TAG_CREATED`, `TAG_UPDATED`, `TAG_DELETED` |
@@ -343,6 +381,11 @@ TABLE: audit_logs
 > - `V10__add_currency_to_expenses.sql` — `currency VARCHAR(3)` + `amount_in_base DOUBLE` on `expenses`, backfills existing rows
 > - `V11__add_base_currency_to_users.sql` — `base_currency VARCHAR(3) DEFAULT 'INR'` on `users`
 > - `V12__create_exchange_rates.sql` — `exchange_rates` table with USD-pivot rate pairs + 3 indexes
+> - `V13__fix_missing_columns.sql` — column guard fixes
+> - `V14__create_receipts.sql` — `receipts` table with `BYTEA` file storage
+> - `V15__receipts_use_file_data.sql` — drops `s3_key`, adds `file_data BYTEA` for existing DBs
+> - `V16__audit_logs_add_receipt_actions.sql` — extends `audit_logs` action constraint
+> - `V17__create_refresh_tokens.sql` — `refresh_tokens` table with token, user_id, expires_at, revoked + 2 indexes
 
 ---
 

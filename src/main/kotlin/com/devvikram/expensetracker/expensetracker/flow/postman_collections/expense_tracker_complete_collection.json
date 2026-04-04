@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "et-complete-v1-2026",
     "name": "Expense Tracker — Complete API",
-    "description": "Single collection covering every endpoint in the Expense Tracker Spring Boot application.\n\nFeatures:\n- Auth (register, login, roles, assign-roles, update base currency)\n- Expenses (CRUD + search + filters + tag filtering + multi-currency)\n- Receipts (batch upload to S3, create-expense-with-receipts, list, delete — pre-signed URLs)\n- Categories (admin global + user-specific)\n- Budgets (CRUD + status)\n- Recurring Expenses (CRUD)\n- Reports (summary, category-wise, date-wise, custom, monthly trends, budget performance, insights, top-expenses, export CSV/PDF)\n- Tags (CRUD, per-user, many-to-many with expenses)\n- Exchange Rates (list rates, convert, manual sync — open.er-api.com, daily auto-sync at 01:00)\n- Audit Logs (all, mine, by-user, by-entity, by-action)\n- Notifications (list, unread, mark-read, delete)\n- Dashboard\n\nSetup:\n1. Import this collection.\n2. Set collection variable base_url to your server (default: http://localhost:8081).\n3. Run Login under Auth - the test script auto-saves the JWT to token.\n4. All other requests inherit Bearer auth from the collection level.\n5. Run 'Sync Exchange Rates' once (ADMIN) to load rates from open.er-api.com before using multi-currency expenses.\n6. For receipt uploads: in Body → form-data, use key 'files' with Type set to File. Add multiple rows with the same key to upload multiple files at once.",
+    "description": "Single collection covering every endpoint in the Expense Tracker Spring Boot application.\n\nFeatures:\n- Auth (register, login, refresh token, logout, roles, assign-roles, update base currency)\n- Expenses (CRUD + search + filters + tag filtering + multi-currency)\n- Receipts (batch upload to DB, create-expense-with-receipts, list, download, delete)\n- Categories (admin global + user-specific)\n- Budgets (CRUD + status)\n- Recurring Expenses (CRUD)\n- Reports (summary, category-wise, date-wise, custom, monthly trends, budget performance, insights, top-expenses, export CSV/PDF)\n- Tags (CRUD, per-user, many-to-many with expenses)\n- Exchange Rates (list rates, convert, manual sync — open.er-api.com, daily auto-sync at 01:00)\n- Audit Logs (all, mine, by-user, by-entity, by-action)\n- Notifications (list, unread, mark-read, delete)\n- Dashboard\n\nSetup:\n1. Import this collection.\n2. Set collection variable base_url to your server (default: http://localhost:8081).\n3. Run Login under Auth — the test script auto-saves the access token to 'token' and refresh token to 'refresh_token'.\n4. All other requests inherit Bearer auth from the collection level.\n5. When the access token expires (15 min), run 'Refresh Token' — it auto-rotates both tokens.\n6. Run 'Sync Exchange Rates' once (ADMIN) to load rates from open.er-api.com before using multi-currency expenses.\n7. For receipt uploads: in Body → form-data, use key 'files' with Type set to File. Add multiple rows with the same key to upload multiple files at once.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -25,7 +25,13 @@
       "key": "token",
       "value": "",
       "type": "string",
-      "description": "Auto-filled by the Login request test script"
+      "description": "Auto-filled by the Login request test script (access token)"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string",
+      "description": "Auto-filled by the Login request test script — used by Refresh Token request"
     },
     {
       "key": "expense_id",
@@ -120,7 +126,7 @@
   "item": [
     {
       "name": "Auth",
-      "description": "Registration, login, profile, roles management.\nPublic: register, login, roles.\nAuthenticated: me.\nSUPER_ADMIN: assign-roles.",
+      "description": "Registration, login, token refresh, logout, profile, roles management.\nPublic: register, login, refresh.\nAuthenticated: me, logout.\nSUPER_ADMIN: assign-roles.",
       "item": [
         {
           "name": "Register",
@@ -164,7 +170,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"status\": true,\n  \"message\": \"User registered successfully\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"user\": { \"id\": 1, \"name\": \"John Doe\", \"email\": \"john@example.com\", \"roles\": [\"USER\"], \"isActive\": true, \"createdAt\": \"2026-03-15T10:00:00\" }\n  }\n}"
+              "body": "{\n  \"status\": true,\n  \"message\": \"User registered successfully\",\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"refreshToken\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"user\": { \"id\": 1, \"name\": \"John Doe\", \"email\": \"john@example.com\", \"roles\": [\"USER\"], \"isActive\": true, \"createdAt\": \"2026-03-15T10:00:00\" }\n  }\n}"
             }
           ]
         },
@@ -176,11 +182,13 @@
               "script": {
                 "exec": [
                   "var json = pm.response.json();",
-                  "if (json.data && json.data.token) {",
-                  "    pm.collectionVariables.set('token', json.data.token);",
-                  "    console.log('Token saved:', json.data.token);",
+                  "if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('token', json.data.accessToken);",
+                  "    pm.collectionVariables.set('refresh_token', json.data.refreshToken);",
+                  "    console.log('Access token saved:', json.data.accessToken);",
+                  "    console.log('Refresh token saved:', json.data.refreshToken);",
                   "} else {",
-                  "    console.warn('Login failed — no token in response');",
+                  "    console.warn('Login failed — no accessToken in response');",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -214,7 +222,7 @@
               "mode": "raw",
               "raw": "{\n  \"email\": \"rathodvikramk382@gmail.com\",\n  \"password\": \"test123\"\n}"
             },
-            "description": "Authenticate and receive a JWT. The test script auto-saves the token to the `token` collection variable. Uses SUPER_ADMIN credentials so all endpoints work correctly."
+            "description": "Authenticate and receive an access token + refresh token. The test script auto-saves accessToken → `token` and refreshToken → `refresh_token` collection variables. Uses SUPER_ADMIN credentials so all endpoints work correctly."
           },
           "response": [
             {
@@ -227,7 +235,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"status\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"user\": { \"id\": 1, \"name\": \"John Doe\", \"email\": \"john@example.com\", \"roles\": [\"USER\"], \"isActive\": true, \"createdAt\": \"2026-03-15T10:00:00\" }\n  }\n}"
+              "body": "{\n  \"status\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"refreshToken\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"user\": { \"id\": 1, \"name\": \"John Doe\", \"email\": \"john@example.com\", \"roles\": [\"USER\"], \"isActive\": true, \"createdAt\": \"2026-03-15T10:00:00\" }\n  }\n}"
             }
           ]
         },
@@ -373,6 +381,87 @@
             "description": "Update the authenticated user's base currency. All future expenses will have their amountInBase computed by converting from the expense currency to this base. Must be a valid 3-letter ISO 4217 code (e.g. INR, USD, EUR, GBP)."
           },
           "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('token', json.data.accessToken);",
+                  "    pm.collectionVariables.set('refresh_token', json.data.refreshToken);",
+                  "    console.log('Tokens rotated. New access token saved.');",
+                  "} else {",
+                  "    console.warn('Refresh failed — check refresh_token variable');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "description": "Exchange a valid refresh token for a new access token + refresh token pair (token rotation). Public endpoint — no Authorization header needed. The test script auto-saves both new tokens to collection variables."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Token refreshed successfully\",\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"refreshToken\": \"new-uuid-refresh-token\",\n    \"user\": { \"id\": 1, \"name\": \"John Doe\", \"email\": \"john@example.com\", \"roles\": [\"USER\"], \"isActive\": true, \"createdAt\": \"2026-03-15T10:00:00\" }\n  }\n}"
+            },
+            {
+              "name": "401 Unauthorized — expired or invalid refresh token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"status\": false,\n  \"code\": \"UNAUTHORIZED\",\n  \"message\": \"Refresh token has expired\",\n  \"timestamp\": \"2026-03-19T10:00:00\",\n  \"path\": \"/api/v1/auth/refresh\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Revoke the current user's refresh token. Requires a valid access token (Bearer). Audit logged as USER_LOGOUT. After logout, the refresh token is permanently deleted — call Login again to get new tokens."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Logged out successfully\",\n  \"data\": null\n}"
+            }
+          ]
         }
       ]
     },

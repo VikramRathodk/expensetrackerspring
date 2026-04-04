@@ -20,6 +20,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
 import java.time.LocalDateTime
 
@@ -35,6 +36,7 @@ class ExpenseService(
     @Lazy private val receiptService: ReceiptService
 ) {
 
+    @Transactional(readOnly = true)
     fun getAllExpensesPaginated(
         userId: Long,
         page: Int = 0,
@@ -51,6 +53,7 @@ class ExpenseService(
             .map { it.toResponse() }
     }
 
+    @Transactional(readOnly = true)
     fun searchExpenses(userId: Long, keyword: String): List<ExpenseResponse> {
         val spec = ExpenseSpecifications.filterByUserId(userId)
             .and(ExpenseSpecifications.filterByTitle(keyword))
@@ -59,6 +62,7 @@ class ExpenseService(
             .sortedByDescending { it.createdAt }
     }
 
+    @Transactional(readOnly = true)
     fun filterByCategory(userId: Long, categoryId: Long): List<ExpenseResponse> {
         val spec = ExpenseSpecifications.filterByUserId(userId)
             .and(ExpenseSpecifications.filterByCategory(categoryId))
@@ -67,6 +71,7 @@ class ExpenseService(
             .sortedByDescending { it.createdAt }
     }
 
+    @Transactional(readOnly = true)
     fun filterByAmountRange(
         userId: Long,
         minAmount: Double,
@@ -81,6 +86,7 @@ class ExpenseService(
             .sortedByDescending { it.createdAt }
     }
 
+    @Transactional(readOnly = true)
     fun filterByDateRange(
         userId: Long,
         startDate: LocalDateTime,
@@ -96,6 +102,7 @@ class ExpenseService(
     }
 
 
+    @Transactional(readOnly = true)
     fun filterExpenses(
         userId: Long,
         request: ExpenseFilterRequest,
@@ -117,6 +124,7 @@ class ExpenseService(
 
 
 
+    @Transactional
     fun createExpense(request: ExpenseRequest): ExpenseResponse {
         val check = budgetService.checkBudgetOnExpense(request.userId, request.categoryId, request.amount)
         if (check.shouldBlock) throw BadRequestException(check.warnings.joinToString(". "))
@@ -152,6 +160,7 @@ class ExpenseService(
         return saved.toResponse()
     }
 
+    @Transactional
     fun createExpenseWithReceipt(request: ExpenseRequest, files: List<MultipartFile>): ExpenseResponse {
         val expense = createExpense(request)
         if (files.isNotEmpty()) {
@@ -160,6 +169,7 @@ class ExpenseService(
         return expense
     }
 
+    @Transactional(readOnly = true)
     fun getExpenseById(id: Long, userId: Long): ExpenseResponse? {
         return expenseRepository.findById(id)
             .filter { it.userId == userId }
@@ -167,6 +177,7 @@ class ExpenseService(
             .orElse(null)
     }
 
+    @Transactional
     fun updateExpense(id: Long, userId: Long, request: ExpenseRequest): ExpenseResponse? {
         val existing = expenseRepository.findById(id)
             .filter { it.userId == userId }
@@ -201,6 +212,7 @@ class ExpenseService(
         return saved.toResponse()
     }
 
+    @Transactional
     fun deleteExpense(id: Long, userId: Long): Boolean {
         val expense = expenseRepository.findById(id)
             .filter { it.userId == userId }
