@@ -12,7 +12,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/recurring-expenses")
+@RequestMapping("/api/v1/recurring-expenses")
 class RecurringExpenseController(
     private val recurringExpenseService: RecurringExpenseService,
     private val securityUtil: SecurityUtil

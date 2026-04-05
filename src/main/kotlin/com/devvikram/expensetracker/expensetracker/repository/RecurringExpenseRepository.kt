@@ -13,6 +13,8 @@ interface RecurringExpenseRepository : JpaRepository<RecurringExpense, Long> {
     // All active, non-deleted recurring expenses for a user
     fun findByUserIdAndIsActiveTrueAndDeletedAtIsNull(userId: Long): List<RecurringExpense>
 
+    fun existsByCategoryIdAndDeletedAtIsNull(categoryId: Long): Boolean
+
     // Ownership-safe single lookup
     fun findByIdAndUserIdAndDeletedAtIsNull(id: Long, userId: Long): RecurringExpense?
 

@@ -5,7 +5,6 @@ import com.devvikram.expensetracker.expensetracker.dto.request.CustomReportReque
 import com.devvikram.expensetracker.expensetracker.entity.Expense
 import com.devvikram.expensetracker.expensetracker.dto.request.ExpenseFilterRequest
 import com.devvikram.expensetracker.expensetracker.entity.Category
-import com.devvikram.expensetracker.expensetracker.entity.User
 import org.springframework.data.jpa.domain.Specification
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -100,6 +99,18 @@ object ExpenseSpecifications {
         }
     }
 
+    fun filterByTagIds(tagIds: List<Long>?): Specification<Expense> {
+        return Specification { root, query, cb ->
+            if (tagIds.isNullOrEmpty()) {
+                cb.conjunction()
+            } else {
+                val tagsJoin = root.join<Any, Any>("tags")
+                query?.distinct(true)
+                tagsJoin.get<Long>("id").`in`(tagIds)
+            }
+        }
+    }
+
     fun buildFilterSpecification(userId: Long, request: ExpenseFilterRequest): Specification<Expense> {
         return filterByUserId(userId)
             .and(filterByTitle(request.searchTitle))
@@ -109,7 +120,7 @@ object ExpenseSpecifications {
             .and(filterByStartDate(request.startDate))
             .and(filterByEndDate(request.endDate))
             .and(filterByMonthYear(request.year, request.month))
-
+            .and(filterByTagIds(request.tagIds))
     }
 
 
@@ -119,7 +130,7 @@ object ExpenseSpecifications {
             val predicates = mutableListOf<Predicate>()
 
             // Always filter by logged-in user
-            predicates.add(cb.equal(root.get<User>("user").get<Long>("id"), userId))
+            predicates.add(cb.equal(root.get<Long>("userId"), userId))
 
             // Date range filter
             if (request.startDate != null && request.endDate != null) {

@@ -24,7 +24,8 @@ class AuthService(
     private val roleService: RoleService,
     private val passwordEncoder: PasswordEncoder,
     private val jwtUtil: JwtUtil,
-    private val auditLogService: AuditLogService
+    private val auditLogService: AuditLogService,
+    private val refreshTokenService: RefreshTokenService
 ) {
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
@@ -63,16 +64,18 @@ class AuthService(
             newValue   = mapOf("email" to savedUser.email, "roles" to savedUser.getRoleNames())
         )
 
-        // Generate JWT token
-        val token = jwtUtil.generateToken(savedUser)
+        // Generate tokens
+        val accessToken = jwtUtil.generateToken(savedUser)
+        val refreshToken = refreshTokenService.createRefreshToken(savedUser.id)
 
         return AuthResponse(
-            token = token,
+            accessToken = accessToken,
+            refreshToken = refreshToken.token,
             user = savedUser.toUserResponse()
         )
     }
 
-  @Transactional(readOnly = true)
+    @Transactional
     fun login(request: LoginRequest): AuthResponse {
         val user = userRepository.findByEmailWithRoles(request.email)
             .orElseThrow { IllegalArgumentException("Invalid email or password") }
@@ -85,7 +88,8 @@ class AuthService(
             throw IllegalArgumentException("Invalid email or password")
         }
 
-        val token = jwtUtil.generateToken(user)
+        val accessToken = jwtUtil.generateToken(user)
+        val refreshToken = refreshTokenService.createRefreshToken(user.id)
 
         auditLogService.log(
             userId     = user.id,
@@ -95,7 +99,8 @@ class AuthService(
         )
 
         return AuthResponse(
-            token = token,
+            accessToken = accessToken,
+            refreshToken = refreshToken.token,
             user = user.toUserResponse()
         )
     }
@@ -153,12 +158,63 @@ class AuthService(
         return updatedUser.toUserResponse()
     }
 
+    @Transactional
+    fun refreshToken(token: String): AuthResponse {
+        val refreshToken = refreshTokenService.validateRefreshToken(token)
+        val user = refreshToken.user
+
+        // Rotate: issue new access token + new refresh token
+        val newAccessToken = jwtUtil.generateToken(user)
+        val newRefreshToken = refreshTokenService.createRefreshToken(user.id)
+
+        auditLogService.log(
+            userId     = user.id,
+            action     = AuditAction.TOKEN_REFRESHED,
+            entityType = "User",
+            entityId   = user.id
+        )
+
+        return AuthResponse(
+            accessToken = newAccessToken,
+            refreshToken = newRefreshToken.token,
+            user = user.toUserResponse()
+        )
+    }
+
+    @Transactional
+    fun logout(userId: Long) {
+        refreshTokenService.revokeByUserId(userId)
+
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.USER_LOGOUT,
+            entityType = "User",
+            entityId   = userId
+        )
+    }
+
+    @Transactional
+    fun updateBaseCurrency(userId: Long, newCurrency: String): UserResponse {
+        val user = userRepository.findById(userId)
+            .orElseThrow { NoSuchElementException("User not found") }
+        val updated = userRepository.save(user.copy(baseCurrency = newCurrency.uppercase()))
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.USER_CURRENCY_UPDATED,
+            entityType = "User",
+            entityId   = userId,
+            newValue   = mapOf("baseCurrency" to newCurrency.uppercase())
+        )
+        return updated.toUserResponse()
+    }
+
     private fun User.toUserResponse() = UserResponse(
-        id = id,
-        name = name,
-        email = email,
-        roles = getRoleNames(),
-        isActive = isActive,
-        createdAt = createdAt.format(DateTimeFormatter.ISO_DATE_TIME)
+        id           = id,
+        name         = name,
+        email        = email,
+        roles        = getRoleNames(),
+        isActive     = isActive,
+        createdAt    = createdAt.format(DateTimeFormatter.ISO_DATE_TIME),
+        baseCurrency = baseCurrency
     )
 }

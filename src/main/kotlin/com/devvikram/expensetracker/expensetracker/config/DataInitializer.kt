@@ -8,17 +8,20 @@ import com.devvikram.expensetracker.expensetracker.service.RoleService
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.annotation.Order
 import org.springframework.security.crypto.password.PasswordEncoder
 
 @Configuration
 class DataInitializer {
 
     @Bean
+    @Order(1)
     fun initRoles(roleService: RoleService) = CommandLineRunner {
         roleService.initializeDefaultRoles()
         println("Default roles initialized successfully")
     }
     @Bean
+    @Order(2)
     fun initAdmin(
         userRepository: UserRepository,
         roleService: RoleService,

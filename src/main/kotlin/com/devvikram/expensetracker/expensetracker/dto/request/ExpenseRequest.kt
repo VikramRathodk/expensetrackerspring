@@ -16,5 +16,10 @@ data class ExpenseRequest(
     @field:Positive(message = "User ID must be valid")
     val userId: Long,
 
-    val note: String? = null
+    val note: String? = null,
+
+    val tagIds: List<Long> = emptyList(),
+
+    /** ISO 4217 currency code for this expense (default: INR). */
+    val currency: String = "INR"
 )

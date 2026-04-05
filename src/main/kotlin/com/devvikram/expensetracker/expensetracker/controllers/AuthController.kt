@@ -6,9 +6,13 @@ import com.devvikram.expensetracker.expensetracker.dto.response.ApiResponse
 import com.devvikram.expensetracker.expensetracker.dto.request.AssignRoleRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.AuthResponse
 import com.devvikram.expensetracker.expensetracker.dto.request.LoginRequest
+import com.devvikram.expensetracker.expensetracker.dto.request.RefreshTokenRequest
 import com.devvikram.expensetracker.expensetracker.dto.request.RegisterRequest
+import com.devvikram.expensetracker.expensetracker.dto.request.UpdateBaseCurrencyRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.UserResponse
 import com.devvikram.expensetracker.expensetracker.repository.UserRepository
+import com.devvikram.expensetracker.expensetracker.security.SecurityUtil
+import com.devvikram.expensetracker.expensetracker.security.anotation.IsAuthenticated
 import com.devvikram.expensetracker.expensetracker.security.anotation.IsSuperAdmin
 import com.devvikram.expensetracker.expensetracker.service.AuthService
 import com.devvikram.expensetracker.expensetracker.service.RoleService
@@ -21,11 +25,12 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 class AuthController(
     private val authService: AuthService,
     private val roleService: RoleService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val securityUtil: SecurityUtil
 ) {
 
     @PostMapping("/register")
@@ -105,6 +110,34 @@ class AuthController(
     }
 
 
+
+    /** PUT /api/v1/auth/me/currency — update the authenticated user's base currency. */
+    @IsAuthenticated
+    @PutMapping("/me/currency")
+    fun updateBaseCurrency(
+        @Valid @RequestBody request: UpdateBaseCurrencyRequest,
+        @AuthenticationPrincipal userDetails: UserDetails
+    ): ResponseEntity<ApiResponse<UserResponse>> {
+        val user = userRepository.findByEmail(userDetails.username)
+            .orElseThrow { RuntimeException("User not found") }
+        val updated = authService.updateBaseCurrency(user.id, request.baseCurrency)
+        return ResponseEntity.ok(ApiResponse(true, "Base currency updated to ${request.baseCurrency}", updated))
+    }
+
+    /** POST /api/v1/auth/refresh — exchange a valid refresh token for a new token pair. */
+    @PostMapping("/refresh")
+    fun refresh(@Valid @RequestBody request: RefreshTokenRequest): ResponseEntity<ApiResponse<AuthResponse>> {
+        val response = authService.refreshToken(request.refreshToken)
+        return ResponseEntity.ok(ApiResponse(true, "Token refreshed successfully", response))
+    }
+
+    /** POST /api/v1/auth/logout — revoke the current user's refresh token. */
+    @IsAuthenticated
+    @PostMapping("/logout")
+    fun logout(): ResponseEntity<ApiResponse<Nothing>> {
+        authService.logout(securityUtil.getCurrentUserId())
+        return ResponseEntity.ok(ApiResponse(true, "Logged out successfully", null))
+    }
 
     @GetMapping("/roles")
     fun getAllRoles(

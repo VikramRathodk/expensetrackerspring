@@ -2,9 +2,12 @@ package com.devvikram.expensetracker.expensetracker.security
 
 
 
+import io.jsonwebtoken.ExpiredJwtException
+import io.jsonwebtoken.JwtException
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.core.userdetails.UserDetailsService
@@ -30,28 +33,38 @@ class JwtAuthenticationFilter(
             return
         }
 
-        val username = jwtUtil.extractUsername(jwt)
+        try {
+            val username = jwtUtil.extractUsername(jwt)
 
-        if (username != null && SecurityContextHolder.getContext().authentication == null) {
+            if (username != null && SecurityContextHolder.getContext().authentication == null) {
+                val userDetails = userDetailsService.loadUserByUsername(username)
 
-            val userDetails = userDetailsService.loadUserByUsername(username)
-
-            if (jwtUtil.validateToken(jwt, userDetails)) {
-
-                val authentication = UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    userDetails.authorities
-                )
-
-                authentication.details =
-                    WebAuthenticationDetailsSource().buildDetails(request)
-
-                SecurityContextHolder.getContext().authentication = authentication
+                if (jwtUtil.validateToken(jwt, userDetails)) {
+                    val authentication = UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        null,
+                        userDetails.authorities
+                    )
+                    authentication.details = WebAuthenticationDetailsSource().buildDetails(request)
+                    SecurityContextHolder.getContext().authentication = authentication
+                }
             }
-        }
 
-        filterChain.doFilter(request, response)
+            filterChain.doFilter(request, response)
+
+        } catch (ex: ExpiredJwtException) {
+            writeUnauthorized(response, "TOKEN_EXPIRED", "Access token has expired — use /api/v1/auth/refresh")
+        } catch (ex: JwtException) {
+            writeUnauthorized(response, "TOKEN_INVALID", "Invalid JWT token")
+        }
+    }
+
+    private fun writeUnauthorized(response: HttpServletResponse, code: String, message: String) {
+        response.status = HttpServletResponse.SC_UNAUTHORIZED
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        response.writer.write(
+            """{"status":false,"code":"$code","message":"$message"}"""
+        )
     }
 
     private fun extractJwtFromRequest(request: HttpServletRequest): String? {

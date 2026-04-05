@@ -6,6 +6,7 @@ import com.devvikram.expensetracker.expensetracker.dto.request.UpdateRecurringEx
 import com.devvikram.expensetracker.expensetracker.dto.response.RecurringExpenseResponse
 import com.devvikram.expensetracker.expensetracker.entity.RecurringExpense
 import com.devvikram.expensetracker.expensetracker.enums.AuditAction
+import com.devvikram.expensetracker.expensetracker.enums.NotificationType
 import com.devvikram.expensetracker.expensetracker.enums.RecurringFrequency
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
 import com.devvikram.expensetracker.expensetracker.repository.CategoryRepository
@@ -22,7 +23,8 @@ class RecurringExpenseService(
     private val recurringExpenseRepository: RecurringExpenseRepository,
     private val categoryRepository: CategoryRepository,
     private val expenseService: ExpenseService,        // routes through ExpenseService → triggers budget check
-    private val auditLogService: AuditLogService
+    private val auditLogService: AuditLogService,
+    private val notificationService: NotificationService
 ) {
 
     private val log = LoggerFactory.getLogger(RecurringExpenseService::class.java)
@@ -61,11 +63,13 @@ class RecurringExpenseService(
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     fun getAllRecurringExpenses(userId: Long): List<RecurringExpenseResponse> =
         recurringExpenseRepository
             .findByUserIdAndIsActiveTrueAndDeletedAtIsNull(userId)
             .map { toResponse(it) }
 
+    @Transactional(readOnly = true)
     fun getRecurringExpenseById(userId: Long, id: Long): RecurringExpenseResponse {
         val recurring = recurringExpenseRepository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
             ?: throw ResourceNotFoundException("Recurring expense with id $id not found")
@@ -184,6 +188,16 @@ class RecurringExpenseService(
                 nextDueDate = nextDueDate,
                 isActive = isStillActive
             )
+        )
+
+        // Notify the user that the recurring expense was auto-processed
+        notificationService.send(
+            userId     = recurring.userId,
+            title      = "Recurring Expense Processed",
+            message    = "₹${recurring.amount} for \"${recurring.title}\" was auto-deducted today. Next due: $nextDueDate.",
+            type       = NotificationType.RECURRING_EXPENSE_DUE,
+            entityType = "RecurringExpense",
+            entityId   = recurring.id
         )
 
         auditLogService.log(

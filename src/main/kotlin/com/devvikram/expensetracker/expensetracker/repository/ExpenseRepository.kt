@@ -14,6 +14,8 @@ interface ExpenseRepository : JpaRepository<Expense, Long>, JpaSpecificationExec
 
     fun findByUserId(userId: Long): List<Expense>
 
+    fun existsByCategoryId(categoryId: Long): Boolean
+
     @Query("""
         SELECT COALESCE(SUM(e.amount), 0.0)
         FROM Expense e

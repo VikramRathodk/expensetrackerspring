@@ -10,14 +10,16 @@ import com.devvikram.expensetracker.expensetracker.service.ExpenseService
 import jakarta.validation.Valid
 import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.multipart.MultipartFile
 import java.time.LocalDateTime
 
 @RestController
-@RequestMapping("/api/expenses")
+@RequestMapping("/api/v1/expenses")
 @CrossOrigin(origins = ["*"])
 @IsAuthenticated
 class ExpenseController(
@@ -161,6 +163,25 @@ class ExpenseController(
                     message = "Expense created successfully",
                     data = created
                 ))
+        } catch (e: Exception) {
+            ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse(status = false, message = e.message ?: "Failed to create expense"))
+        }
+    }
+
+    /** Create an expense and optionally attach multiple receipts in one request (multipart). */
+    @PostMapping("/with-receipt", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    fun createExpenseWithReceipt(
+        @RequestPart("expense") request: ExpenseRequest,
+        @RequestPart(value = "files", required = false) files: List<MultipartFile>?,
+        @AuthenticationPrincipal userDetails: UserDetails
+    ): ResponseEntity<ApiResponse<ExpenseResponse>> {
+        return try {
+            val userId = getUserIdFromAuth(userDetails)
+            val validatedRequest = request.copy(userId = userId)
+            val created = expenseService.createExpenseWithReceipt(validatedRequest, files ?: emptyList())
+            ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse(status = true, message = "Expense created successfully", data = created))
         } catch (e: Exception) {
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse(status = false, message = e.message ?: "Failed to create expense"))

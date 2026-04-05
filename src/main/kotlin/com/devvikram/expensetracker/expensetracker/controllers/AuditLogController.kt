@@ -13,7 +13,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/audit-logs")
+@RequestMapping("/api/v1/audit-logs")
 class AuditLogController(
     private val auditLogService: AuditLogService,
     private val securityUtil: SecurityUtil

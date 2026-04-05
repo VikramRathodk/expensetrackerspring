@@ -7,6 +7,7 @@ import com.devvikram.expensetracker.expensetracker.dto.response.BudgetStatusResp
 import com.devvikram.expensetracker.expensetracker.entity.Budget
 import com.devvikram.expensetracker.expensetracker.enums.AuditAction
 import com.devvikram.expensetracker.expensetracker.enums.BudgetPeriod
+import com.devvikram.expensetracker.expensetracker.enums.NotificationType
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
 import com.devvikram.expensetracker.expensetracker.repository.BudgetRepository
 import com.devvikram.expensetracker.expensetracker.repository.CategoryRepository
@@ -22,7 +23,8 @@ class BudgetService(
     private val budgetRepository: BudgetRepository,
     private val expenseRepository: ExpenseRepository,
     private val categoryRepository: CategoryRepository,
-    private val auditLogService: AuditLogService
+    private val auditLogService: AuditLogService,
+    private val notificationService: NotificationService
 ) {
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -57,11 +59,13 @@ class BudgetService(
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     fun getAllBudgets(userId: Long): List<BudgetResponse> =
         budgetRepository
             .findByUserIdAndIsActiveTrueAndDeletedAtIsNull(userId)
             .map { toResponse(it, userId) }
 
+    @Transactional(readOnly = true)
     fun getBudgetStatus(userId: Long, budgetId: Long): BudgetStatusResponse {
         val budget = budgetRepository.findByIdAndUserIdAndDeletedAtIsNull(budgetId, userId)
             ?: throw ResourceNotFoundException("Budget with id $budgetId not found")
@@ -134,6 +138,7 @@ class BudgetService(
      *   val check = budgetService.checkBudgetOnExpense(userId, categoryId, amount)
      *   if (check.shouldBlock) throw BadRequestException(check.warnings.joinToString(". "))
      */
+    @Transactional(readOnly = true)
     fun checkBudgetOnExpense(userId: Long, categoryId: Long, expenseAmount: Double): BudgetCheckResult {
         val categoryBudgets = budgetRepository
             .findByUserIdAndCategoryIdAndIsActiveTrueAndDeletedAtIsNull(userId, categoryId)
@@ -153,10 +158,28 @@ class BudgetService(
             when {
                 newSpent >= budget.amount -> {
                     shouldBlock = true
-                    warnings.add("This expense exceeds your $label budget of ₹${budget.amount}.")
+                    val msg = "This expense exceeds your $label budget of ₹${budget.amount}."
+                    warnings.add(msg)
+                    notificationService.send(
+                        userId     = userId,
+                        title      = "Budget Exceeded",
+                        message    = msg,
+                        type       = NotificationType.BUDGET_EXCEEDED,
+                        entityType = "Budget",
+                        entityId   = budget.id
+                    )
                 }
                 percentUsed >= budget.alertThreshold -> {
-                    warnings.add("You've used ${(percentUsed * 100).toInt()}% of your $label budget of ₹${budget.amount}.")
+                    val msg = "You've used ${(percentUsed * 100).toInt()}% of your $label budget of ₹${budget.amount}."
+                    warnings.add(msg)
+                    notificationService.send(
+                        userId     = userId,
+                        title      = "Budget Alert",
+                        message    = msg,
+                        type       = NotificationType.BUDGET_ALERT,
+                        entityType = "Budget",
+                        entityId   = budget.id
+                    )
                 }
             }
         }

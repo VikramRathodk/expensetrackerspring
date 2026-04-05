@@ -22,6 +22,9 @@ class EnvConfig : EnvironmentPostProcessor {
         environment: ConfigurableEnvironment,
         application: SpringApplication
     ) {
+        // Skip env-var enforcement in the test profile — test properties supply all values directly
+        if (environment.activeProfiles.any { it == "test" }) return
+
         val dotenv = dotenv {
             ignoreIfMissing = true
         }

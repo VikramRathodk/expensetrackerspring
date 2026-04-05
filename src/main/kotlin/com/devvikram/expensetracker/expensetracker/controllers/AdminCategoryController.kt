@@ -1,5 +1,6 @@
 package com.devvikram.expensetracker.expensetracker.controllers
 
+import com.devvikram.expensetracker.expensetracker.dto.request.CategoryRequest
 import com.devvikram.expensetracker.expensetracker.dto.response.ApiResponse
 import com.devvikram.expensetracker.expensetracker.entity.Category
 import com.devvikram.expensetracker.expensetracker.repository.UserRepository
@@ -14,7 +15,7 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/admin/categories")
+@RequestMapping("/api/v1/admin/categories")
 @IsAdmin
 class AdminCategoryController(
     private val categoryService: CategoryService,
@@ -23,40 +24,33 @@ class AdminCategoryController(
 
     private val logger = LoggerFactory.getLogger(this::class.java)
 
+    private fun getAdminId(userDetails: UserDetails): Long =
+        userRepository.findByEmail(userDetails.username)
+            .orElseThrow { RuntimeException("Admin not found") }
+            .id
+
+    /* ============== LIST GLOBAL CATEGORIES ============== */
+    @GetMapping
+    fun listGlobalCategories(
+        @AuthenticationPrincipal userDetails: UserDetails
+    ): ResponseEntity<ApiResponse<List<Category>>> {
+        logger.info("List global categories called by admin username={}", userDetails.username)
+        val categories = categoryService.listGlobalCategories()
+        return ResponseEntity.ok(ApiResponse(true, "Global categories fetched", categories))
+    }
+
     /* ============== CREATE GLOBAL CATEGORY ============== */
     @PostMapping
     fun createGlobalCategory(
-        @Valid @RequestBody category: Category,
+        @Valid @RequestBody request: CategoryRequest,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<Category>> {
-
-        logger.info(
-            "Create global category API called by admin username={} categoryName={}",
-            userDetails.username, category.name
-        )
-
-        val admin = userRepository.findByEmail(userDetails.username)
-            .orElseThrow {
-                logger.error("Admin not found in DB for username={}", userDetails.username)
-                RuntimeException("Admin not found")
-            }
-
-        logger.info("Admin verified. adminId={}", admin.id)
-
-        // Pass admin's userId to track who created the category
-        val saved = categoryService.addGlobalCategory(category, admin.id)
-
-        logger.info(
-            "Global category created successfully. categoryId={} by adminId={}",
-            saved.id, admin.id
-        )
-
+        logger.info("Create global category called by admin username={} name={}", userDetails.username, request.name)
+        val adminId = getAdminId(userDetails)
+        val saved = categoryService.addGlobalCategory(request, adminId)
+        logger.info("Global category created. categoryId={} adminId={}", saved.id, adminId)
         return ResponseEntity.status(HttpStatus.CREATED).body(
-            ApiResponse(
-                status = true,
-                message = "Global category created successfully",
-                data = saved
-            )
+            ApiResponse(true, "Global category created successfully", saved)
         )
     }
 
@@ -64,37 +58,14 @@ class AdminCategoryController(
     @PutMapping("/{id}")
     fun updateGlobalCategory(
         @PathVariable id: Long,
-        @Valid @RequestBody category: Category,
+        @Valid @RequestBody request: CategoryRequest,
         @AuthenticationPrincipal userDetails: UserDetails
     ): ResponseEntity<ApiResponse<Category>> {
-
-        logger.info(
-            "Update global category API called by admin username={} categoryId={}",
-            userDetails.username, id
-        )
-
-        val admin = userRepository.findByEmail(userDetails.username)
-            .orElseThrow {
-                logger.error("Admin not found in DB for username={}", userDetails.username)
-                RuntimeException("Admin not found")
-            }
-
-        logger.info("Admin verified. adminId={}", admin.id)
-
-        val updated = categoryService.updateGlobalCategory(id, category)
-
-        logger.info(
-            "Global category updated successfully. categoryId={} by adminId={}",
-            updated.id, admin.id
-        )
-
-        return ResponseEntity.ok(
-            ApiResponse(
-                status = true,
-                message = "Global category updated successfully",
-                data = updated
-            )
-        )
+        logger.info("Update global category id={} called by admin username={}", id, userDetails.username)
+        val adminId = getAdminId(userDetails)
+        val updated = categoryService.updateGlobalCategory(id, request, adminId)
+        logger.info("Global category updated. categoryId={} adminId={}", updated.id, adminId)
+        return ResponseEntity.ok(ApiResponse(true, "Global category updated successfully", updated))
     }
 
     /* ============== DELETE GLOBAL CATEGORY ============== */
@@ -102,33 +73,11 @@ class AdminCategoryController(
     fun deleteGlobalCategory(
         @PathVariable id: Long,
         @AuthenticationPrincipal userDetails: UserDetails
-    ): ResponseEntity<ApiResponse<Unit>> {
-
-        logger.info(
-            "Delete global category API called by admin username={} categoryId={}",
-            userDetails.username, id
-        )
-
-        val admin = userRepository.findByEmail(userDetails.username)
-            .orElseThrow {
-                logger.error("Admin not found in DB for username={}", userDetails.username)
-                RuntimeException("Admin not found")
-            }
-
-        logger.info("Admin verified. adminId={}", admin.id)
-
-        categoryService.deleteGlobalCategory(id)
-
-        logger.info(
-            "Global category deleted successfully. categoryId={} by adminId={}",
-            id, admin.id
-        )
-
-        return ResponseEntity.ok(
-            ApiResponse(
-                status = true,
-                message = "Global category deleted successfully"
-            )
-        )
+    ): ResponseEntity<ApiResponse<Nothing>> {
+        logger.info("Delete global category id={} called by admin username={}", id, userDetails.username)
+        val adminId = getAdminId(userDetails)
+        categoryService.deleteGlobalCategory(id, adminId)
+        logger.info("Global category deleted. categoryId={} adminId={}", id, adminId)
+        return ResponseEntity.ok(ApiResponse(true, "Global category deleted successfully"))
     }
 }

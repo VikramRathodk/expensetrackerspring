@@ -1,15 +1,24 @@
 package com.devvikram.expensetracker.expensetracker.service
 
-
+import com.devvikram.expensetracker.expensetracker.dto.request.CategoryRequest
+import com.devvikram.expensetracker.expensetracker.entity.Category
+import com.devvikram.expensetracker.expensetracker.enums.AuditAction
+import com.devvikram.expensetracker.expensetracker.exceptions.BadRequestException
 import com.devvikram.expensetracker.expensetracker.exceptions.ConflictException
 import com.devvikram.expensetracker.expensetracker.exceptions.ResourceNotFoundException
-import com.devvikram.expensetracker.expensetracker.entity.Category
+import com.devvikram.expensetracker.expensetracker.repository.BudgetRepository
 import com.devvikram.expensetracker.expensetracker.repository.CategoryRepository
+import com.devvikram.expensetracker.expensetracker.repository.ExpenseRepository
+import com.devvikram.expensetracker.expensetracker.repository.RecurringExpenseRepository
 import org.springframework.stereotype.Service
 
 @Service
 class CategoryService(
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val expenseRepository: ExpenseRepository,
+    private val budgetRepository: BudgetRepository,
+    private val recurringExpenseRepository: RecurringExpenseRepository,
+    private val auditLogService: AuditLogService
 ) {
 
     /* ======================================================
@@ -17,70 +26,78 @@ class CategoryService(
      * ======================================================
      * Rules:
      * - Visible to all users
-     * - Only ADMIN/System can create/update/delete
-     * - userId is always 0 (system owned)
+     * - Only ADMIN/SUPER_ADMIN can create/update/delete
+     * - userId stores which admin created the category
      */
 
-    /* ---------- CREATE GLOBAL CATEGORY ---------- */
-    /* ---------- CREATE GLOBAL CATEGORY ---------- */
-    fun addGlobalCategory(category: Category, adminId: Long): Category {
+    fun listGlobalCategories(): List<Category> =
+        categoryRepository.findAll().filter { it.isGlobal }
 
-        // Prevent duplicate global category names
-        if (categoryRepository.existsByNameIgnoreCaseAndIsGlobalTrue(category.name)) {
-            throw ConflictException("Global category '${category.name}' already exists")
+    fun addGlobalCategory(request: CategoryRequest, adminId: Long): Category {
+        if (categoryRepository.existsByNameIgnoreCaseAndIsGlobalTrue(request.name)) {
+            throw ConflictException("Global category '${request.name}' already exists")
         }
 
-        // Save with admin's userId who created it
-        return categoryRepository.save(
-            category.copy(
-                isGlobal = true,
-                userId = adminId  // Store which admin created this global category
-            )
+        val saved = categoryRepository.save(
+            Category(name = request.name, description = request.description, isGlobal = true, userId = adminId)
         )
+
+        auditLogService.log(
+            userId     = adminId,
+            action     = AuditAction.CATEGORY_CREATED,
+            entityType = "Category",
+            entityId   = saved.id,
+            newValue   = mapOf("name" to saved.name, "isGlobal" to true)
+        )
+
+        return saved
     }
 
-    /* ---------- UPDATE GLOBAL CATEGORY ---------- */
-    fun updateGlobalCategory(
-        categoryId: Long,
-        updatedCategory: Category
-    ): Category {
-
+    fun updateGlobalCategory(categoryId: Long, request: CategoryRequest, adminId: Long): Category {
         val existing = categoryRepository.findById(categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
-        // Ensure only global categories are updated here
-        if (!existing.isGlobal) {
-            throw ConflictException("Only global categories can be updated here")
-        }
+        if (!existing.isGlobal) throw ConflictException("Only global categories can be updated here")
 
-        // Prevent duplicate global category names
-        if (
-            existing.name.lowercase() != updatedCategory.name.lowercase() &&
-            categoryRepository.existsByNameIgnoreCaseAndIsGlobalTrue(updatedCategory.name)
+        if (existing.name.lowercase() != request.name.lowercase() &&
+            categoryRepository.existsByNameIgnoreCaseAndIsGlobalTrue(request.name)
         ) {
-            throw ConflictException("Global category '${updatedCategory.name}' already exists")
+            throw ConflictException("Global category '${request.name}' already exists")
         }
 
-        return categoryRepository.save(
-            existing.copy(
-                name = updatedCategory.name,
-                description = updatedCategory.description
-            )
+        val updated = categoryRepository.save(
+            existing.copy(name = request.name, description = request.description)
         )
+
+        auditLogService.log(
+            userId     = adminId,
+            action     = AuditAction.CATEGORY_UPDATED,
+            entityType = "Category",
+            entityId   = updated.id,
+            oldValue   = mapOf("name" to existing.name),
+            newValue   = mapOf("name" to updated.name)
+        )
+
+        return updated
     }
 
-    /* ---------- DELETE GLOBAL CATEGORY ---------- */
-    fun deleteGlobalCategory(categoryId: Long) {
-
+    fun deleteGlobalCategory(categoryId: Long, adminId: Long) {
         val existing = categoryRepository.findById(categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
-        // Safety check: only global categories allowed
-        if (!existing.isGlobal) {
-            throw ConflictException("Only global categories can be deleted")
-        }
+        if (!existing.isGlobal) throw ConflictException("Only global categories can be deleted here")
+
+        checkCategoryNotInUse(categoryId)
 
         categoryRepository.delete(existing)
+
+        auditLogService.log(
+            userId     = adminId,
+            action     = AuditAction.CATEGORY_DELETED,
+            entityType = "Category",
+            entityId   = categoryId,
+            oldValue   = mapOf("name" to existing.name, "isGlobal" to true)
+        )
     }
 
     /* ======================================================
@@ -92,86 +109,86 @@ class CategoryService(
      * - User can manage ONLY their own categories
      */
 
-    /* ---------- CREATE USER CATEGORY ---------- */
-    fun addUserCategory(category: Category, userId: Long): Category {
-
-        // Prevent duplicate category names for same user
-        if (categoryRepository.existsByNameIgnoreCaseAndUserId(category.name, userId)) {
-            throw ConflictException("Category '${category.name}' already exists for this user")
+    fun addUserCategory(request: CategoryRequest, userId: Long): Category {
+        if (categoryRepository.existsByNameIgnoreCaseAndUserId(request.name, userId)) {
+            throw ConflictException("Category '${request.name}' already exists for this user")
         }
 
-        return categoryRepository.save(
-            category.copy(
-                userId = userId,
-                isGlobal = false
-            )
+        val saved = categoryRepository.save(
+            Category(name = request.name, description = request.description, isGlobal = false, userId = userId)
         )
+
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.CATEGORY_CREATED,
+            entityType = "Category",
+            entityId   = saved.id,
+            newValue   = mapOf("name" to saved.name, "isGlobal" to false)
+        )
+
+        return saved
     }
 
-    /* ---------- UPDATE USER CATEGORY ---------- */
-    fun updateUserCategory(
-        categoryId: Long,
-        updatedCategory: Category,
-        userId: Long
-    ): Category {
-
+    fun updateUserCategory(categoryId: Long, request: CategoryRequest, userId: Long): Category {
         val existing = categoryRepository.findById(categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
-        // Block updates to global categories
-        if (existing.isGlobal) {
-            throw ConflictException("Global categories cannot be modified")
-        }
+        if (existing.isGlobal) throw ConflictException("Global categories cannot be modified by users")
+        if (existing.userId != userId) throw ConflictException("You are not allowed to update this category")
 
-        // Ensure user owns the category
-        if (existing.userId != userId) {
-            throw ConflictException("You are not allowed to update this category")
-        }
-
-        // Prevent duplicate names for same user
-        if (
-            existing.name.lowercase() != updatedCategory.name.lowercase() &&
-            categoryRepository.existsByNameIgnoreCaseAndUserId(
-                updatedCategory.name,
-                userId
-            )
+        if (existing.name.lowercase() != request.name.lowercase() &&
+            categoryRepository.existsByNameIgnoreCaseAndUserId(request.name, userId)
         ) {
-            throw ConflictException("Category '${updatedCategory.name}' already exists for this user")
+            throw ConflictException("Category '${request.name}' already exists for this user")
         }
 
-        return categoryRepository.save(
-            existing.copy(
-                name = updatedCategory.name,
-                description = updatedCategory.description
-            )
+        val updated = categoryRepository.save(
+            existing.copy(name = request.name, description = request.description)
         )
+
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.CATEGORY_UPDATED,
+            entityType = "Category",
+            entityId   = updated.id,
+            oldValue   = mapOf("name" to existing.name),
+            newValue   = mapOf("name" to updated.name)
+        )
+
+        return updated
     }
 
-    /* ---------- READ USER + GLOBAL CATEGORIES ---------- */
     fun getCategoriesForUser(userId: Long): List<Category> =
-    // User can see:
-    // - All global categories
-        // - Their own categories
         categoryRepository.findByUserIdOrIsGlobalTrue(userId)
 
-    /* ---------- DELETE USER CATEGORY ---------- */
     fun deleteUserCategory(categoryId: Long, userId: Long) {
-
         val existing = categoryRepository.findById(categoryId)
             .orElseThrow { ResourceNotFoundException("Category not found") }
 
-        // Global categories cannot be deleted by users
-        if (existing.isGlobal) {
-            throw ConflictException("Global categories cannot be deleted")
-        }
+        if (existing.isGlobal) throw ConflictException("Global categories cannot be deleted by users")
+        if (existing.userId != userId) throw ConflictException("You are not allowed to delete this category")
 
-        // Ensure user owns the category
-        if (existing.userId != userId) {
-            throw ConflictException("You are not allowed to delete this category")
-        }
+        checkCategoryNotInUse(categoryId)
 
         categoryRepository.delete(existing)
+
+        auditLogService.log(
+            userId     = userId,
+            action     = AuditAction.CATEGORY_DELETED,
+            entityType = "Category",
+            entityId   = categoryId,
+            oldValue   = mapOf("name" to existing.name, "isGlobal" to false)
+        )
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private fun checkCategoryNotInUse(categoryId: Long) {
+        if (expenseRepository.existsByCategoryId(categoryId))
+            throw BadRequestException("Cannot delete: category is referenced by existing expenses")
+        if (budgetRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId))
+            throw BadRequestException("Cannot delete: category is referenced by active budgets")
+        if (recurringExpenseRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId))
+            throw BadRequestException("Cannot delete: category is referenced by active recurring expenses")
     }
 }
-
-

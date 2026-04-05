@@ -27,5 +27,27 @@ enum class AuditAction {
     // ── Auth ──────────────────────────────────────────────────────────────────
     USER_REGISTERED,
     USER_LOGIN,
-    ROLE_ASSIGNED
+    USER_LOGOUT,
+    TOKEN_REFRESHED,
+    ROLE_ASSIGNED,
+
+    // ── Notification ──────────────────────────────────────────────────────────
+    NOTIFICATION_READ,
+    NOTIFICATION_DELETED,
+
+    // ── Reports ───────────────────────────────────────────────────────────────
+    REPORT_EXPORTED,
+
+    // ── Tags ──────────────────────────────────────────────────────────────────
+    TAG_CREATED,
+    TAG_UPDATED,
+    TAG_DELETED,
+
+    // ── Currency ──────────────────────────────────────────────────────────────
+    EXCHANGE_RATE_SYNCED,
+    USER_CURRENCY_UPDATED,
+
+    // ── Receipts / Attachments ────────────────────────────────────────────────
+    RECEIPT_UPLOADED,
+    RECEIPT_DELETED
 }

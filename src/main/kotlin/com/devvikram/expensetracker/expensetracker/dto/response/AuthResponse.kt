@@ -2,6 +2,7 @@ package com.devvikram.expensetracker.expensetracker.dto.response
 
 // Auth Response
 data class AuthResponse(
-    val token: String,
+    val accessToken: String,
+    val refreshToken: String,
     val user: UserResponse
 )

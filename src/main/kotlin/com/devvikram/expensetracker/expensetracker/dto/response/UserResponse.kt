@@ -7,5 +7,6 @@ data class UserResponse(
     val email: String,
     val roles: List<String>,
     val isActive: Boolean,
-    val createdAt: String
+    val createdAt: String,
+    val baseCurrency: String = "INR"
 )
