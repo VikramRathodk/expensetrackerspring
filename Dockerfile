@@ -1,22 +1,14 @@
 # Build stage
-FROM gradle:8.14-jdk21 AS builder
+FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 
-# Copy all gradle files
 COPY build.gradle.kts settings.gradle.kts gradlew ./
 COPY gradle ./gradle
-
-# Copy source code
 COPY src ./src
 
-# Build the application with info logging to see what's happening
-RUN gradle clean bootJar --no-daemon --info
+RUN chmod +x gradlew && ./gradlew clean bootJar --no-daemon
 
-# Verify JAR was created and show its location
-RUN echo "Contents of build directory:" && \
-    find /app/build -name "*.jar" -type f && \
-    ls -lah /app/build/libs/
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
