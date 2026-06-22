@@ -7,7 +7,7 @@ COPY build.gradle.kts settings.gradle.kts gradlew ./
 COPY gradle ./gradle
 COPY src ./src
 
-RUN chmod +x gradlew && ./gradlew clean bootJar --no-daemon
+RUN chmod +x gradlew && ./gradlew clean bootJar --no-daemon --stacktrace
 
 
 # Runtime stage
