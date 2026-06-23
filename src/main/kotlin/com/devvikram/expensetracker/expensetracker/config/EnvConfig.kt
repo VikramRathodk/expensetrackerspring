@@ -33,6 +33,7 @@ class EnvConfig : EnvironmentPostProcessor {
         val missing = mutableListOf<String>()
 
         REQUIRED_VARS.forEach { key ->
+            
             val osValue = System.getenv(key) ?: ""
             val value = dotenv.get(key, osValue)
             if (value.isBlank()) {
