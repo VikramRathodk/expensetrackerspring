@@ -3,7 +3,6 @@ package com.devvikram.expensetracker.expensetracker.security
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.http.HttpMethod
 import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration
@@ -44,7 +43,9 @@ class SecurityConfig(
     }
 
     @Bean
-    fun authenticationManager(authConfig: AuthenticationConfiguration): AuthenticationManager {
+    fun authenticationManager(
+        authConfig: AuthenticationConfiguration
+    ): AuthenticationManager {
         return authConfig.authenticationManager
     }
 
@@ -52,10 +53,18 @@ class SecurityConfig(
     fun corsConfigurationSource(): CorsConfigurationSource {
         val config = CorsConfiguration()
         config.allowedOrigins = allowedOrigins
-        config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+        config.allowedMethods = listOf(
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "OPTIONS"
+        )
         config.allowedHeaders = listOf("*")
         config.allowCredentials = true
         config.maxAge = 3600L
+
         val source = UrlBasedCorsConfigurationSource()
         source.registerCorsConfiguration("/**", config)
         return source
@@ -63,6 +72,7 @@ class SecurityConfig(
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
+
         http
             .csrf { it.disable() }
             .cors { it.configurationSource(corsConfigurationSource()) }
@@ -73,25 +83,47 @@ class SecurityConfig(
                 it.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             }
             .authorizeHttpRequests { auth ->
-                auth
-                    // Public endpoints
-                    .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
-                    .requestMatchers("/api/v1/auth/roles").permitAll()
-                    .requestMatchers("/error").permitAll()
-                    // Swagger / OpenAPI — public in dev, restricted in prod
-                    .requestMatchers(
+
+                // Public Authentication APIs
+                auth.requestMatchers(
+                    "/api/v1/auth/register",
+                    "/api/v1/auth/login",
+                    "/api/v1/auth/refresh"
+                ).permitAll()
+
+                auth.requestMatchers(
+                    "/api/v1/auth/roles"
+                ).permitAll()
+
+                auth.requestMatchers(
+                    "/error"
+                ).permitAll()
+
+                // Swagger / OpenAPI
+                if (swaggerPublic) {
+                    auth.requestMatchers(
                         "/swagger-ui/**",
                         "/swagger-ui.html",
                         "/v3/api-docs/**",
                         "/v3/api-docs.yaml"
-                    ).apply {
-                        if (swaggerPublic) permitAll() else hasRole("SUPER_ADMIN")
-                    }
-                    // All other requests require authentication
-                    .anyRequest().authenticated()
+                    ).permitAll()
+                } else {
+                    auth.requestMatchers(
+                        "/swagger-ui/**",
+                        "/swagger-ui.html",
+                        "/v3/api-docs/**",
+                        "/v3/api-docs.yaml"
+                    ).hasRole("SUPER_ADMIN")
+                }
+
+                // All other endpoints require authentication
+                auth.anyRequest().authenticated()
             }
             .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
+            .addFilterBefore(
+                jwtAuthenticationFilter,
+                UsernamePasswordAuthenticationFilter::class.java
+            )
 
         return http.build()
     }
